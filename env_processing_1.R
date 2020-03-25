@@ -88,6 +88,7 @@ colnames(field2017)[1]='Experiment'
 colnames(field2018)[c(9,10)]=c('lat','long')
 colnames(field2018)[1]='Experiment'
 field2018[field2018$Experiment=='WIH2',c('lat','long')]=c('43.324231'	,'-89.33564')
+field2015[field2015$Experiment=='WIH1',c('lat','long')]=c('43.05443'	,'-89.52875')
 field2016[field2016$Experiment=='INH1',c('lat','long')]=c('40.47925'	,'-86.99013')
 geofield2014=field2014[,c('lat','long','Year','Experiment','City')]
 geofield2015=field2015[,c('lat','long','Year','Experiment','City')]##NYH1 disease trial with no info, TXH2 missing --> need to be removed, absolutely no info on this trial
@@ -108,6 +109,10 @@ rm(weather_all)
 missing_lonlat=unique(weather[which(is.na(weather$long)),c('Year','Field.Location')])
 missing_lonlat$Year_Exp=paste(missing_lonlat$Year,missing_lonlat$Field.Location,sep = '_')
 row.names(missing_lonlat)=NULL
+
+
+###################ELIMINATE SOME EXPERIMENTS###################################
+
 #Create column Year_Field.Location and eliminate those corresponding to inbred lines experiments, disease trials, or trials which should be removed
 #MNH1_2017: bad phenotypic quality + weird location regarding geographical position in 2017 (MADISON ?)
 #2014_NEH3 ,2017_NEH3 and 2017_NEH4 have no silking date
@@ -118,6 +123,12 @@ to_remove=missing_lonlat$Year_Exp[c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
 weather=weather[-which(weather$Year_Exp%in%to_remove),]
 weather=weather[-which(weather$Year_Exp%in%c('2017_MNH1','2014_NEH3','2015_NEH1','2015_NEH2','2015_NEH3','2015_NEH4','2017_NEH3',"2015_GAI1","2015_INI1","2015_TXI2","2015_IAI1","2015_NYI2","2015_KSI1","2015_IAI2","2015_IAI3","2015_MNI1","2015_WII1","2015_AZI1","2015_IAI4","2015_MOI1","2015_PAI1","2015_WII2", "2015_PAI2", "2015_MOI2","2015_AZI2","2015_DEI1","2015_ILI1","2015_NCI1","2015_TXI1")),]
 weather=weather[-which(weather$Year_Exp%in%c('2014_NYH1','2015_NYH1','2016_NYH1','2017_NYH1','2018_NYH1')),]
+
+
+
+
+
+
 
 
 ##############################################################
@@ -197,8 +208,10 @@ soildata[soildata$Year_Exp%in%c('2015_NYH2','2014_NYH2'),'imputed']='close_locat
 
 #Looking for missing soil information
 soil_missing=soildata[is.na(soildata$X..Sand),]
-s1=get_ssurgo(template=c('TX051'),label = 'TXH1')
-daymet_tiles_data=daymet_tiles[]
+setwd("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1")
+write.table(soil_missing,'inter_soil_missing.txt',sep = '\t',quote = F,row.names = F,col.names = T)
+
+soil_ssurgo=readxl::read_xlsx('soil_imputed_wss.xlsx')
 
 #
 
