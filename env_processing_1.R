@@ -173,8 +173,14 @@ weather$Year_Exp=paste(weather$Year,weather$Field.Location,sep = '_')
 ################## SOIL INFORMATION ##########################
 #######Info very limited for years 2014 + 2015 --> need to use external package : feddata
 ###Load the soil data files to add the soil texture (at least)
+###Prepare the data.frames with common column names
 soil2014=as.data.frame(cbind('Year'=2014,'Experiment'=as.character(field2014$Experiment),'Soil.test.type'=as.character(as.vector(field2014$Soil.test.type)),'Soil.texture'=as.character(as.vector(field2014$Soil.texture)),'Soil.pH'=as.character(as.vector(field2014$Soil.pH))))
 soil2014$Year_Exp=paste(soil2014$Year,soil2014$Experiment,sep = '_')
+colnames(soil2014)[4]='Texture'
+soil2014$X..Sand=NA
+soil2014$X..Silt=NA
+soil2014$X..Clay=NA
+soil2014$OM=NA
 soil2015=read.csv('g2f_2015_soil_data.csv',header = T,sep = ',')
 soil2015$X..Sand=NA
 soil2015$X..Silt=NA
@@ -195,24 +201,24 @@ soil2018$Year=2018
 soil2018$Year_Exp=paste(soil2018$Year,soil2018$`Field ID`,sep = '_')
 colnames(soil2018)[c(25,26,27)]=c('X..Sand','X..Silt','X..Clay')
 colnames(soil2018)[10]='OM'
-#Soil texture (no data for 2015, no composition percentage for 2014)
-colnames(soil2014)[4]='Texture'
-soil2014$X..Sand=NA
-soil2014$X..Silt=NA
-soil2014$X..Clay=NA
-soil2014$OM=NA
 
 
+#Merge soil information across years
 soil_1=rbind(soil2014[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2015[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2016[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2017[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2018[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')])
 soildata=as.data.frame(unique(cbind('Year_Exp'=weather$Year_Exp,'Year'=weather$Year,'City'=as.character(weather$city_revgeo),'lat'=weather$lat,'long'=weather$long,'lonlat_imputed'=weather$lonlat_added,'Field.Location'=as.character(weather$Field.Location))))
 soildata=merge(soildata,soil_1,by='Year_Exp',all.x=T)
 
+
 #Removing duplicated lines for same Year_Loc
 soildata=soildata[-which(duplicated(soildata[,1])),]
+
 #Create column to indicate that the data were imputed form other years of experiments
 soildata$imputed=NA
 soildata[!is.na(soildata$X..Sand),'imputed']='NO'
 
+
+
+######VERY CLOSE COORDINATES --> SAME SOIL COMPOSITION ASSUMED######
 soildata[soildata$Year_Exp=='2014_TXH1',c('X..Sand','X..Silt','X..Clay')]=c(11,30,59)
 
 soildata[soildata$Year_Exp=='2015_ONH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_ONH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
