@@ -9,11 +9,15 @@ library(intrval)
 library(dplyr)
 library(ggplot2)
 library(rnoaa)
+library(stringr)
 library(ggmap)
 library(revgeo)
+library(pracma)
 library(FedData)
+library(tidyverse)
 source('latlong2county.R')
 `%notin%` <- Negate(`%in%`)
+options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
 
 ##Import 5 years of weather data
 setwd("~/Final_datasets_G2F/ALL_WEATHER")
@@ -87,8 +91,14 @@ colnames(field2015)[c(19,20)]=c('lat','long')
 colnames(field2016)[c(23,24)]=c('lat','long')
 colnames(field2016)[1]='Experiment'
 colnames(field2017)[c(26,27)]=c('lat','long')
+field2017[29,c('lat','long')]=c(30.54535,	-96.43258)
 colnames(field2017)[1]='Experiment'
 colnames(field2018)[c(26,27)]=c('lat','long')
+field2018[6,c('lat','long')]=c(41.19870,	-91.48618)
+field2018[7,c('lat','long')]=c(42.06593,	-94.72742)
+field2018[8,c('lat','long')]=c(41.98745,	-92.26014)
+field2018[9,c('lat','long')]=c(41.99775,	-93.69625)
+
 colnames(field2018)[1]='Experiment'
 
 
@@ -97,49 +107,63 @@ geofield2015=field2015[,c('lat','long','Year','Experiment','City')]
 geofield2016=field2016[,c('lat','long','Year','Experiment','City')]
 geofield2017=field2017[,c('lat','long','Year','Experiment','City')]
 geofield2018=field2018[,c('lat','long','Year','Experiment','City')]
+geofield2014$Experiment=as.character(as.vector(geofield2014$Experiment))
+geofield2014[22,'Experiment']=as.character('WIH1')
 geofield2018[c(15,16),'Experiment']='MOH1'
 geo_data_fields=rbind(geofield2014,geofield2015,geofield2016,geofield2017,geofield2018)
 colnames(geo_data_fields)[4]='Field.Location'
 
-#Missing coordinates 
-geo_data_fields[82,c('lat','long')]=c(41.19869,	-91.48620)
-geo_data_fields[c(30,83),c('lat','long')]=c(42.06591,	-94.72745)
-geo_data_fields[c(84),c('lat','long')]=c(41.98738,	-92.26016)
-geo_data_fields[c(85),c('lat','long')]=c(41.99750,	-93.69990)
 
-#Use revgeo to add county and city
+#Missing coordinates 
+#For those with at least the city,nand a unique field location in the other years --> imputation possible
+geo_data_fields$lonlat_added='NO'
+geo_data_fields[82,c('lat','long','lonlat_added')]=c(41.19869,	-91.48620,'YES')
+geo_data_fields[c(30),c('lat','long','lonlat_added')]=c(42.06591,	-94.72745,'YES')
+geo_data_fields[c(83),c('lat','long','lonlat_added')]=c(42.06591,	-94.72745,'YES')
+geo_data_fields[c(84),c('lat','long','lonlat_added')]=c(41.98738,	-92.26016,'YES')
+geo_data_fields[c(85),c('lat','long','lonlat_added')]=c(41.99750,	-93.69990,'YES')
+geo_data_fields[c(93),c('lat','long','lonlat_added')]=c(41.16636,	-96.41726,'YES')#NEH1 2016: assume to be the same field as the year before
+##TXH2: except 2014 no info on geographical coordinates AT ALL
+geo_data_fields[c(101),c('lat','long','lonlat_added')]=c(34.62261,	-82.73796,'YES')#SCH1 2016: suppose same location as 2017
+geo_data_fields[c(116),c('lat','long','lonlat_added')]=c(40.06119,	-88.23327,'YES')#ILH1 2017: assume same location as previous years too
+geo_data_fields[c(118),c('lat','long','lonlat_added')]=c(40.47835,	-86.99013,'YES')#INH1 2017: assume same location as previous years too
+geo_data_fields[c(167),c('lat','long','lonlat_added')]=c(43.30480,	-89.38520,'YES')#change WIH2 2018
+geo_data_fields[c(94),c('lat','long','lonlat_added')]=c(41.167022,	-96.417192,'YES')#change NEH4 based on 2015, same (900 m distance) in 2017 too
+geo_data_fields=geo_data_fields[!is.na(geo_data_fields$lat),]
+geo_data_fields$lat=as.numeric(geo_data_fields$lat)
+geo_data_fields$long=as.numeric(geo_data_fields$long)
+
+
+
+#Use revgeo to add county, ZIP code, and city
 results_couties<-latlong2county(data.frame(geo_data_fields$long[!is.na(geo_data_fields$long)],geo_data_fields$lat[!is.na(geo_data_fields$lat)]))
+geo_data_fields$state=sapply(strsplit(results_couties,","), `[`, 1)
+geo_data_fields$county=sapply(strsplit(results_couties,","), `[`, 2)
 results_cities=revgeo(longitude=geo_data_fields$long[!is.na(geo_data_fields$long)], latitude=geo_data_fields$lat[!is.na(geo_data_fields$lat)], provider = 'photon',item='city', output='frame')
 
+geo_data_fields$city_revgeo=results_cities$city
+geo_data_fields$city_revgeo[is.na(geo_data_fields$city_revgeo)]=geo_data_fields$City[is.na(geo_data_fields$city_revgeo)]
+geo_data_fields$zip=results_cities$zip
 
-#Merge weather data with geographical coordinates
+
+
+#Merge weather data with geographical coordinates information
 weather=merge(geo_data_fields,weather_all,by=c('Year','Field.Location'), all.y = T)##Merging the weather data with Lon/lat + name cities 
 rm(weather_all)
 
-##If missing global Lon/Lat for some locations, eliminate trial from analyses depending on the case (Cf 'specific locations' document)
-## Or if just problem with the columns: add geographical coordinates values from corner lower left
-#Table missing 
-missing_lonlat=unique(weather[which(is.na(weather$long)),c('Year','Field.Location')])
-missing_lonlat$Year_Exp=paste(missing_lonlat$Year,missing_lonlat$Field.Location,sep = '_')
-row.names(missing_lonlat)=NULL
 
 
 ###################ELIMINATE SOME EXPERIMENTS###################################
-
-#Create column Year_Field.Location and eliminate those corresponding to inbred lines experiments, disease trials, or trials which should be removed
-#MNH1_2017: bad phenotypic quality + weird location regarding geographical position in 2017 (MADISON ?)
-#2014_NEH3 ,2017_NEH3 and 2017_NEH4 have no silking date
-#2015_NEH1 has no info on irrigation, 2015_NEH2 has no plant height, 2015_NEH3 has no plant height and  2015_NEH4 has no silking date
-#SCH1: no grain yield data
+#Eliminate those corresponding to inbred lines experiments, disease trials
 ##NYH1 disease trial with no info, TXH2 missing --> need to be removed, absolutely no info on this trial
+##The rest are inbred field trials
+missing_lonlat=unique(weather[which(is.na(weather$long)),c('Year','Field.Location')])
+weather=weather[-which(is.na(weather$long)),]
+
+to_remove_inbred_trials=c("AZI1", "AZI2", "DEI1", "GAI1", "IAI1", "IAI2", "IAI3", "IAI4","ILI1", "INI1","KSI1" ,"MNI1" ,"MOI1", "MOI2", "NCI1" ,"NYI2", "PAI1" ,"PAI2" ,"TXI1" ,"TXI2" , "WII1", "WII2" )
+weather=weather[-which(weather$Field.Location%in%to_remove_inbred_trials),]
+
 weather$Year_Exp=paste(weather$Year,weather$Field.Location,sep = '_')
-to_remove=missing_lonlat$Year_Exp[c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,29,30)]
-weather=weather[-which(weather$Year_Exp%in%to_remove),]
-weather=weather[-which(weather$Year_Exp%in%c('2017_MNH1','2014_NEH3','2015_NEH1','2015_NEH2','2015_NEH3','2015_NEH4','2017_NEH3',"2015_GAI1","2015_INI1","2015_TXI2","2015_IAI1","2015_NYI2","2015_KSI1","2015_IAI2","2015_IAI3","2015_MNI1","2015_WII1","2015_AZI1","2015_IAI4","2015_MOI1","2015_PAI1","2015_WII2", "2015_PAI2", "2015_MOI2","2015_AZI2","2015_DEI1","2015_ILI1","2015_NCI1","2015_TXI1")),]
-weather=weather[-which(weather$Year_Exp%in%c('2014_NYH1','2015_NYH1','2016_NYH1','2017_NYH1','2018_NYH1')),]
-
-
-
 
 
 
@@ -152,78 +176,79 @@ weather=weather[-which(weather$Year_Exp%in%c('2014_NYH1','2015_NYH1','2016_NYH1'
 soil2014=as.data.frame(cbind('Year'=2014,'Experiment'=as.character(field2014$Experiment),'Soil.test.type'=as.character(as.vector(field2014$Soil.test.type)),'Soil.texture'=as.character(as.vector(field2014$Soil.texture)),'Soil.pH'=as.character(as.vector(field2014$Soil.pH))))
 soil2014$Year_Exp=paste(soil2014$Year,soil2014$Experiment,sep = '_')
 soil2015=read.csv('g2f_2015_soil_data.csv',header = T,sep = ',')
+soil2015$X..Sand=NA
+soil2015$X..Silt=NA
+soil2015$X..Clay=NA
+soil2015$Texture=NA
+soil2015$Year=2015
+soil2015$Year_Exp=paste(soil2015$Year,soil2015$Experiment,sep = '_')
 soil2016=read.csv('g2f_2016_soil_data_clean.csv',header = T,sep = ',',stringsAsFactors = F)
 soil2016$Year=2016
+colnames(soil2016)[10]='OM'
 soil2016$Year_Exp=paste(soil2016$Year,soil2016$Location,sep = '_')
 soil2017=read.csv('g2f_2017_soil_data_clean.csv',header = T,sep = ',',stringsAsFactors = F)
 soil2017$Year=2017
+colnames(soil2017)[9]='OM'
 soil2017$Year_Exp=paste(soil2017$Year,soil2017$Location,sep = '_')
 soil2018=as.data.frame(readxl::read_xlsx('g2f_2018_soil_data.xlsx'))
 soil2018$Year=2018
 soil2018$Year_Exp=paste(soil2018$Year,soil2018$`Field ID`,sep = '_')
+colnames(soil2018)[c(25,26,27)]=c('X..Sand','X..Silt','X..Clay')
+colnames(soil2018)[10]='OM'
 #Soil texture (no data for 2015, no composition percentage for 2014)
 colnames(soil2014)[4]='Texture'
 soil2014$X..Sand=NA
 soil2014$X..Silt=NA
 soil2014$X..Clay=NA
+soil2014$OM=NA
 
-colnames(soil2018)[c(25,26,27)]=c('X..Sand','X..Silt','X..Clay')
-soil_1=rbind(soil2014[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture')],soil2016[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture')],soil2017[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture')],as.data.frame(soil2018[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture')]))
-soildata=as.data.frame(unique(cbind('Year_Exp'=weather$Year_Exp,'Year'=weather$Year,'City'=as.character(weather$City),'lat'=weather$lat,'long'=weather$long,'Field.Location'=as.character(weather$Field.Location))))
+
+soil_1=rbind(soil2014[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2015[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2016[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2017[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2018[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')])
+soildata=as.data.frame(unique(cbind('Year_Exp'=weather$Year_Exp,'Year'=weather$Year,'City'=as.character(weather$city_revgeo),'lat'=weather$lat,'long'=weather$long,'lonlat_imputed'=weather$lonlat_added,'Field.Location'=as.character(weather$Field.Location))))
 soildata=merge(soildata,soil_1,by='Year_Exp',all.x=T)
 
-#Removing duplicated lines
+#Removing duplicated lines for same Year_Loc
 soildata=soildata[-which(duplicated(soildata[,1])),]
+#Create column to indicate that the data were imputed form other years of experiments
 soildata$imputed=NA
 soildata[!is.na(soildata$X..Sand),'imputed']='NO'
 
 soildata[soildata$Year_Exp=='2014_TXH1',c('X..Sand','X..Silt','X..Clay')]=c(11,30,59)
-soildata[soildata$Year_Exp=='2014_TXH1','imputed']='NO'
-soildata[soildata$Year_Exp=='2015_ONH1',c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_ONH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+
+soildata[soildata$Year_Exp=='2015_ONH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_ONH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp=='2015_ONH1','imputed']='close_location_other_years'
-soildata[soildata$Year_Exp=='2018_DEH1',c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_DEH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp=='2018_DEH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_DEH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp=='2018_DEH1','imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2014_GAH1','2015_GAH1','2018_GAH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_GAH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2014_GAH1','2015_GAH1','2018_GAH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_GAH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2014_GAH1','2015_GAH1','2018_GAH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2014_IAH2','2016_IAH2','2018_IAH2'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_IAH2',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2014_IAH2','2016_IAH2','2018_IAH2'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2016_IAH1','2018_IAH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_IAH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2016_IAH1','2018_IAH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2017_IAH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2016_IAH1','2018_IAH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_IAH3'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_IAH3',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2016_IAH1','2018_IAH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_IAH3'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_IAH3',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2015_IAH3'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2017_IAH3',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2015_IAH3'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_MOH1','2014_MOH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_MOH1',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2015_MOH1','2014_MOH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2014_ILH1','2015_ILH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_ILH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2014_MOH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2018_MOH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
+soildata[soildata$Year_Exp%in%c('2014_MOH1'),'imputed']='close_location_other_years'
+soildata[soildata$Year_Exp%in%c('2015_MOH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_MOH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
+soildata[soildata$Year_Exp%in%c('2015_MOH1'),'imputed']='close_location_other_years'
+soildata[soildata$Year_Exp%in%c('2014_ILH1','2015_ILH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_ILH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2014_ILH1','2015_ILH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2014_INH1','2015_INH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_INH1',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2014_INH1','2015_INH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2014_MNH1','2015_MNH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_MNH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2014_MNH1','2015_MNH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_MNH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2014_MNH1','2015_MNH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_NCH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_NCH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2015_NCH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2017_NCH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2015_NCH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2014_NCH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2016_NCH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2014_NCH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2016_NCH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2014_NCH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_TXH1','2016_TXH1','2017_TXH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2014_TXH1',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2015_TXH1','2016_TXH1','2017_TXH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2014_TXH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2015_TXH1','2016_TXH1','2017_TXH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2016_IAH4','2018_IAH4','2014_IAH1','2015_IAH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_IAH4',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2016_IAH4','2018_IAH4','2014_IAH1','2015_IAH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_WIH2'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_WIH2',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2015_WIH2'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_OHH1','2018_OHH1'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_OHH1',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2015_OHH1','2018_OHH1'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_NYH3'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2018_NYH3',c('X..Sand','X..Silt','X..Clay','Texture')]
-soildata[soildata$Year_Exp%in%c('2015_NYH3'),'imputed']='close_location_other_years'
-soildata[soildata$Year_Exp%in%c('2015_NYH2','2014_NYH2'),c('X..Sand','X..Silt','X..Clay','Texture')]=soildata[soildata$Year_Exp=='2017_NYH2',c('X..Sand','X..Silt','X..Clay','Texture')]
+soildata[soildata$Year_Exp%in%c('2015_OHH1'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2017_OHH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
+soildata[soildata$Year_Exp%in%c('2015_OHH1'),'imputed']='close_location_other_years'
+soildata[soildata$Year_Exp%in%c('2015_NYH2','2014_NYH2'),c('X..Sand','X..Silt','X..Clay','Texture','OM')]=soildata[soildata$Year_Exp=='2017_NYH2',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 soildata[soildata$Year_Exp%in%c('2015_NYH2','2014_NYH2'),'imputed']='close_location_other_years'
 
 
 
 #Looking for missing soil information
-soil_missing=soildata[is.na(soildata$X..Sand),]
 setwd("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1")
-write.table(soil_missing,'inter_soil_missing.txt',sep = '\t',quote = F,row.names = F,col.names = T)
+write.table(soildata,'soildata.txt',sep = '\t',quote = F,row.names = F,col.names = T)
 
 soil_ssurgo=readxl::read_xlsx('soil_imputed_wss.xlsx')
 
