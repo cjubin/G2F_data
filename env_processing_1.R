@@ -261,7 +261,6 @@ soil_ssurgo=readxl::read_xlsx('soil_imputed_wss.xlsx')
 #
 
 
-
 ###Add previous crop on the field (agronomic feature) or rotation info
 
 
