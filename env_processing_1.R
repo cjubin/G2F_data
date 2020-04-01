@@ -205,7 +205,7 @@ colnames(soil2018)[10]='OM'
 
 #Merge soil information across years
 soil_1=rbind(soil2014[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2015[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2016[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2017[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')],soil2018[,c('Year_Exp','X..Sand','X..Silt','X..Clay','Texture','OM')])
-soildata=as.data.frame(unique(cbind('Year_Exp'=weather$Year_Exp,'Year'=weather$Year,'City'=as.character(weather$city_revgeo),'lat'=weather$lat,'long'=weather$long,'lonlat_imputed'=weather$lonlat_added,'Field.Location'=as.character(weather$Field.Location))))
+soildata=as.data.frame(unique(cbind('Year_Exp'=weather$Year_Exp,'Year'=weather$Year,'City'=as.character(weather$city_revgeo),'lat'=weather$lat,'long'=weather$long,'lonlat_added'=weather$lonlat_added,'Field.Location'=as.character(weather$Field.Location))))
 soildata=merge(soildata,soil_1,by='Year_Exp',all.x=T)
 
 
@@ -215,7 +215,6 @@ soildata=soildata[-which(duplicated(soildata[,1])),]
 #Create column to indicate that the data were imputed form other years of experiments
 soildata$imputed=NA
 soildata[!is.na(soildata$X..Sand),'imputed']='NO'
-
 
 
 ######VERY CLOSE COORDINATES --> SAME SOIL COMPOSITION ASSUMED######
@@ -256,21 +255,88 @@ soildata[soildata$Year_Exp%in%c('2015_NYH2','2014_NYH2'),'imputed']='close_locat
 setwd("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1")
 write.table(soildata,'soildata.txt',sep = '\t',quote = F,row.names = F,col.names = T)
 
-soil_ssurgo=readxl::read_xlsx('soil_imputed_wss.xlsx')
+soil_imputed=as.data.frame(readxl::read_xlsx('Soil_imputed.xlsx'))
+soil_imputed$imputed='web_soil_survey'
+soildata$Year_Exp=as.character(as.vector(soildata$Year_Exp))
+soildata$Texture=as.character(as.vector(soildata$Texture))
+soildata[which(is.na(soildata$X..Sand)),c('Year_Exp','X..Sand','X..Silt','X..Clay','OM','Texture','imputed')]=soil_imputed[match(soildata[which(is.na(soildata$X..Sand)),]$Year_Exp,soil_imputed$Year_Exp),c('Year_Exp','X..Sand','X..Silt','X..Clay','OM','Texture','imputed')]
 
-#
-
-
-###Add previous crop on the field (agronomic feature) or rotation info
-
+#Final merge of soil data with global weather table
+weather=merge(weather,soildata[,c(1,8:13)],by='Year_Exp',all.x=T)
 
 
 
-##Check name cities Metadata file with real cities names from revgeo
+###################AGRONOMIC MANAGEMENT############################
+###Add previous crop on the field (agronomic feature) and total N
+agro_features=c('Year_Exp','Previous.crop')
+field2014$Year_Exp=paste(field2014$Year,field2014$Experiment,sep = '_')
+field2015$Year_Exp=paste(field2015$Year,field2015$Experiment,sep = '_')
+field2016$Year_Exp=paste(field2016$Year,field2016$Experiment,sep = '_')
+field2017$Year_Exp=paste(field2017$Year,field2017$Experiment,sep = '_')
+field2018$Year_Exp=paste(field2018$Year,field2018$Experiment,sep = '_')
+colnames(field2015)[c(10)]=c('Previous.crop')
+colnames(field2016)[c(13)]=c('Previous.crop')
+colnames(field2017)[c(16)]=c('Previous.crop')
+colnames(field2018)[c(16)]=c('Previous.crop')
 
-##Remove inbred-related field trials weather information
+agro_management=rbind(field2014[,agro_features],field2015[,agro_features],field2016[,agro_features],field2017[,agro_features],field2018[,agro_features])
+agrodata=as.data.frame(unique(cbind('Year_Exp'=weather$Year_Exp,'Year'=weather$Year)))
+agrodata=merge(agrodata,agro_management,by='Year_Exp',all.x=T)
+agrodata$Previous.crop=as.character(as.vector(agrodata$Previous.crop))
+for (j in 1:nrow(agrodata)) {
+  if (agrodata[j,'Previous.crop']%in%c('soybean','soybeans','Soybeans','Soybean')){agrodata[j,'Previous.crop']<-'soybean'}
+  if (agrodata[j,'Previous.crop']%in%c('wheat/soybean double crop','Wheat and Double Crop Soybeans','Small Grains and Double Crop Soybeans')){agrodata[j,'Previous.crop']<-'wheat/double crop soybean'}
+  if (agrodata[j,'Previous.crop']%in%c('Cotton')){agrodata[j,'Previous.crop']<-'cotton'}
+  if (agrodata[j,'Previous.crop']%in%c('Corn','corn','Corn ')){agrodata[j,'Previous.crop']<-'corn'}
+  if (agrodata[j,'Previous.crop']%in%c('Wheat','Winter Wheat','Fallow most of 2014 winter planted in fall of 2014 then sprayed with Glystar 24 floz/a on 5/3/15  and killed spring of 2015 spray ')){agrodata[j,'Previous.crop']<-'wheat'}
+  if (agrodata[j,'Previous.crop']%in%c('Lima beans followed by rye cover crop')){agrodata[j,'Previous.crop']<-'lima beans'}
+  if (agrodata[j,'Previous.crop']%in%c('Sorghum')){agrodata[j,'Previous.crop']<-'sorghum'}
+}
 
-################################
-################################
+
+#Final merge of previous crop data with global weather table
+weather=merge(weather,agrodata[,c(1,3)],by='Year_Exp',all.x=T)
+
+##############################################################################
+################################WEATHER DATA PROCESSING#######################
+##############################################################################
+
+
+
+
 ##CREATE A DAILY WEATHER DATASET
 
+
+daily_weather=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(x))
+daily_weather$missing_obs_temp=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(which(is.na(x))))[,3]
+
+
+##Add beginning and end of the growing season
+growingseason=read.table("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/planting_harvest_dates/growingseason.txt",header = T)
+
+
+####CHECK INSTANTANEOUS WEATHER DATA#####
+#The aim of the step test is to verify the rate of change of instantaneous data (detection of unrealistic
+#jumps in values or dead band caused by blocked sensors). 
+
+
+##TEMPERATURE
+#Range test
+weather[which(weather$Temperature..C.<(-30)),]<-NA
+weather[which(weather$Temperature..C.>50),]<-NA
+
+weather <-arrange(weather,Year_Exp,Day.of.Year,Time.Local.)
+#weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
+#                          FUN=function(x) c(NA, diff(x) / tail(x, -1))))
+weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
+                          FUN=function(x) c(NA, diff(x) )))
+
+
+
+m<-weather>%> 
+
+
+
+
+colnames(daily_weather)=c('Day.of.Year','Year_Exp','mean.temperature')
+daily_weather$=NA
