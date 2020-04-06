@@ -7,6 +7,9 @@ library(geojsonio)
 library(leaflet.minicharts)
 colnames(weather)[c(30,31,32)]=c('% Sand','% Silt','% Clay')
 
+
+##Option 1
+
 #Separate by years
 for (i in 2014:2018) {
   data1=unique(weather[weather$Year==i,c(1,3,4,5,34,30:32)])
@@ -43,6 +46,7 @@ for (i in 2014:2018) {
 
 ########################
 ########################
+
 ##Option2
 
 tilesURL <- "http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
