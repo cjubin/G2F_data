@@ -215,7 +215,7 @@ for (j in unique(daily_weather$Year_Exp)) {
   
   #Downloading the data for the growing season
   download_data<-data.frame('prcp'=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='PRCP',startdate = date_start,enddate = date_end,limit = 500)$data$value,'YDAY'=NA)
-  download_data$YDAY<-1:nrow(download_data)
+  download_data$YDAY<-yday(date_start):yday(date_end)
   
   
   
