@@ -1,9 +1,21 @@
 ##############################################################################
 ################################ WEATHER DATA PROCESSING #######################
 ##############################################################################
-library(dplyr)
-
 rm(list=ls())
+
+library(rnoaa)
+library(GSODR)
+library(countyweather)
+stations <- ghcnd_stations() 
+stations<-filter(stations,last_year==2020)
+stations<-filter(stations,first_year<=2014)
+
+library(dplyr)
+library(plyr)
+
+options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
+
+
 weather = read.table(
   '~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/weather_semihourly.txt',
   header = T,
@@ -75,8 +87,8 @@ for (v in unique(daily_weather[!is.na(daily_weather$Date.Planted),'Year_Exp'])) 
 
 #Data.frame containing daily_weather the missing dates at the beginning/end of the growing season
 ## 2015_ILH2, 2015_IAH1, 2015_IAH2, 2015_IAH3, 2015_IAH4 removed because no phenotypic data present in the final hybrid pheno files
-library(plyr)
-df<-ldply(dd,data.frame)
+
+df<-plyr::ldply(dd,data.frame)
 colnames(df)<-c('Year_Exp','Day.of.Year')
 df<-merge(df,daily_weather,by=c('Year_Exp','Day.of.Year'),all.x = T)
 daily_weather=df
@@ -96,7 +108,7 @@ weather[which(weather$Rainfall..mm.>120),'Rainfall..mm.']<-NA
 weather[which(weather$Rainfall..mm.<0),'flagged_rain_instant']<-'flagged'
 weather[which(weather$Rainfall..mm.<0),'Rainfall..mm.']<-NA
 
-#First flagged vaue assignment based on ratio rain values present/nb obs per day + if weird number of daily obs (ex: 50, 100 etc) then the value is flagged too.
+#First flagged value assignment based on ratio rain values present/nb obs per day + if weird number of daily obs (ex: 50, 100 etc) then the value is flagged too.
 weather$Year_Exp=as.factor(weather$Year_Exp)
 weather$Day.of.Year=as.factor(weather$Day.of.Year)
 total_obs_daily<-as.data.frame(weather %>% group_by(Year_Exp,Day.of.Year) %>% tally())
@@ -108,11 +120,19 @@ colnames(nomissing_rain)[3]='number_obs_present'
 alldaymissing_rain<-weather %>% 
   group_by(Day.of.Year,Year_Exp)%>%
   summarise(all(is.na(Rainfall..mm.)))
+colnames(alldaymissing_rain)[3]='all_missing_rain'
 
+detach('package:plyr')
+already_imputed<-weather %>% 
+  group_by(Day.of.Year,Year_Exp)%>%
+  mutate(already_imputed=case_when(Cleaning.Method%in%'Imputed' ~'already_imputed'))%>%
+  select(Day.of.Year,Year_Exp,already_imputed)
+already_imputed<-unique(already_imputed)
 
 
 rain<-merge(total_obs_daily,nomissing_rain,by=c('Day.of.Year','Year_Exp'),all.x=T)
 rain<-merge(rain,alldaymissing_rain,by=c('Day.of.Year','Year_Exp'),all.x=T)
+
 rm(total_obs_daily,nomissing_rain,alldaymissing_rain)
 
 rain<-rain%>%group_by(Day.of.Year,Year_Exp)%>%mutate(ratio=number_obs_present/n)%>%mutate(flagged_rain=case_when(ratio<0.9 ~'flagged',
@@ -123,22 +143,27 @@ rain[rain$n>96,'flagged_rain']='flagged'
 rain[rain$n>24&rain$n<48,'flagged_rain']='flagged'
 rain[rain$n>48&rain$n<72,'flagged_rain']='flagged'
 rain[rain$n>72&rain$n<96,'flagged_rain']='flagged'
-rain[rain$`all(is.na(Rainfall..mm.))`==TRUE,'flagged_rain']='flagged'
-rain[rain$`all(is.na(Rainfall..mm.))`==TRUE,'ratio']=0
+rain[rain$all_missing_rain==TRUE,'flagged_rain']='flagged'
+rain[rain$all_missing_rain==TRUE,'ratio']=0
 
+weather=merge(weather,rain[,c(1:2,7)],by=c('Day.of.Year','Year_Exp'),all.x=T)
 
 daily_weather=merge(daily_weather,rain[,c(1:3,7)],by=c('Day.of.Year','Year_Exp'),all.x=T)
-weather=merge(weather,rain[,c(1:2,7)],by=c('Day.of.Year','Year_Exp'),all.x=T)
+daily_weather=merge(daily_weather,already_imputed,by=c('Day.of.Year','Year_Exp'),all.x=T)
+
 
 
 #Daily sum computed for not flagged values:
+
 j<-weather%>%
-  filter(flagged_rain!='flagged')%>%
+  filter(flagged_rain%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
-  mutate(sum_rainfall=sum(Rainfall..mm.,na.rm = T))
+  mutate(sum_rainfall=sum(Rainfall..mm.,na.rm = T))%>%
+  select(Day.of.Year,Year_Exp,sum_rainfall)
+
 
 #Add this daily rainfall sum to the daily_weather table
-daily_weather<-merge(daily_weather,unique(j[,c(1,2,39)]),by=c('Day.of.Year','Year_Exp'),all.x = T)
+daily_weather<-merge(daily_weather,j,by=c('Day.of.Year','Year_Exp'),all.x = T)
 
 
 #Second Control range: daily values
@@ -152,33 +177,76 @@ daily_weather[is.na(daily_weather$flagged_rain),'flagged_rain']='flagged'
 
 
 ######IMPUTE RAIN MISSING VALUES #####
-library(rnoaa)
-library(countyweather)
-options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
-station_data <- ghcnd_stations() 
+
+
 
 list_yearexp=list()
-list_prcp=list()
+daily_weather$stationID_NOAA=NA
+daily_weather$dist=NA
 cc=1
+#GSODR::update_station_list()
 for (j in unique(daily_weather$Year_Exp)) {
+  print(j)
   year=unique(daily_weather[daily_weather$Year_Exp==j,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'Year']))]
   longitude=unique(daily_weather[daily_weather$Year_Exp==j,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'long']))]
   latitude=unique(daily_weather[daily_weather$Year_Exp==j,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'lat']))]
   
-  lat_lon_df <- data.frame(id = j,
-                           latitude = latitude,
-                           longitude = longitude)
+  #lat_lon_df <- data.frame(id = j,
+  #                         latitude = latitude,
+  #                         longitude = longitude)
   
-  list_yearexp[[cc]]=nearest_stations(LAT = latitude,LON = longitude,distance=20)
+  #####
+  #list_yearexp[[cc]]=GSODR::nearest_stations(LAT = latitude,LON = longitude,distance=30)
+  #download_data=GSODR::get_GSOD(year,station = list_yearexp[[cc]])
   
-  #date_start=paste(year,'-01-01',sep = '')
-  #date_end=paste(year,'-12-31',sep = '')
+  #for (s in 1:nrow(daily_weather[daily_weather$Year_Exp==j,])) {
+  #  if (daily_weather[s,'flagged_rain']=='flagged'){
+  #    day=daily_weather[s,'Day.of.Year']
+  #    print(download_data[download_data$YDAY==day,'PRCP'])
+  #    daily_weather[s,'sum_rainfall']==download_data[download_data$YDAY==day,'PRCP']
+   # }
+  #}
+  ####
+  
+  ####
+  stations_close=as.data.frame(meteo_distance(stations,latitude,longitude,radius = 30))
+  stations_close<-filter(stations_close,element=='PRCP')
+  dist=unique(stations_close[stations_close$distance==min(stations_close$distance),'distance'])
+  print(dist)
+  id_stations=unique(stations_close[stations_close$distance==min(stations_close$distance),'id'])
+  date_start=paste(year,'-01-01',sep = '')
+  date_end=paste(year,'-12-31',sep = '')
+  #id_stations<-id_stations[grep('USW',id_stations)]
+  download_data<-data.frame('prcp'=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='PRCP',startdate = date_start,enddate = date_end,limit = 500)$data$value,'YDAY'=NA)
+  download_data$YDAY<-1:nrow(download_data)
+  
+  
+  
+  for (s in 1:nrow(daily_weather[daily_weather$Year_Exp==j,])) {
+    if (daily_weather[daily_weather$Year_Exp==j,'flagged_rain'][s]=='flagged'){
+      day=as.numeric(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'][s])
+      #print(download_data[download_data$YDAY==day,'prcp'])
+      daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'sum_rainfall']=download_data[download_data$YDAY==day,'prcp']/10
+      daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'stationID_NOAA']=id_stations
+      daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'dist']=dist
+    }
+    if (daily_weather[daily_weather$Year_Exp==j,'flagged_rain'][s]=='OK'){
+      day=as.numeric(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'][s])
+      #print(download_data[download_data$YDAY==day,'prcp'])
+      print(paste(day,daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'sum_rainfall'],download_data[download_data$YDAY==day,'prcp']/10))
+      
+    }
+  }
+  
   #list_prcp[[cc]]=meteo_pull_monitors(monitors = list_yearexp[[cc]]$id,date_min = year,date_max = year,var='PRCP')
+  #ut <- ncdc(datasetid='NORMAL_DLY', stationid='GHCND:USW00014895', datatypeid='dly-tmax-normal', startdate = '2010-05-01', enddate = '2010-05-10')
+  
   cc=cc+1
 }
 
 
 
+####COMPARE MONTHLY DAILY SUMMARIES TO ENSURE RAINFALL DATA OK#######
 
 
 
