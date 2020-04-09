@@ -12,6 +12,7 @@ stations<-filter(stations,first_year<=2014)
 
 library(dplyr)
 library(plyr)
+library(lubridate)
 
 options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
 
@@ -58,6 +59,9 @@ daily_weather$NWS.Network=weather[match(daily_weather$Year_Exp,weather$Year_Exp)
 
 
 ##Add beginning and end of the growing season to weather table
+
+## 2015_ILH2, 2015_IAH1, 2015_IAH2, 2015_IAH3, 2015_IAH4 removed because no phenotypic data present in the final hybrid pheno files
+
 growingseason=read.table("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/planting_harvest_dates/growingseason_extendeddates.txt",header = T,sep = '\t')
 daily_weather$Date.Planted=growingseason[match(daily_weather$Year_Exp,growingseason$Year_Exp),2]
 daily_weather$Date.Harvested=growingseason[match(daily_weather$Year_Exp,growingseason$Year_Exp),3]
@@ -74,25 +78,30 @@ for (j in unique(daily_weather$Year)) {
 daily_weather=daily_weather[,-which(colnames(daily_weather)%in%c("Date.Planted","Date.Harvested","Date.Planted2","Date.Harvested2"))]
 colnames(daily_weather)[c(23,24)]<-c("Date.Planted","Date.Harvested")
 
+rep.row<-function(x,n){
+  matrix(rep(x,each=n),nrow=n)
+}
+
 dd=list()
 s=1
 for (v in unique(daily_weather[!is.na(daily_weather$Date.Planted),'Year_Exp'])) {
   dd[[s]]=as.data.frame(matrix(NA,ncol = 2,nrow = length(unique(daily_weather[daily_weather$Year_Exp==v,"Date.Planted"]):unique(daily_weather[daily_weather$Year_Exp==v,"Date.Harvested"]))))
-  dd[[s]][,1]=v
-  dd[[s]][,2]=unique(daily_weather[daily_weather$Year_Exp==v,"Date.Planted"]):unique(daily_weather[daily_weather$Year_Exp==v,"Date.Harvested"])
+  dd[[s]][,2]=v
+  dd[[s]][,1]=unique(daily_weather[daily_weather$Year_Exp==v,"Date.Planted"]):unique(daily_weather[daily_weather$Year_Exp==v,"Date.Harvested"])
+  dd[[s]]=cbind(dd[[s]],rep.row(unique(daily_weather[daily_weather$Year_Exp==v,4:24]),nrow(dd[[s]])))
   s=s+1
 }
 
 
-
-#Data.frame containing daily_weather the missing dates at the beginning/end of the growing season
-## 2015_ILH2, 2015_IAH1, 2015_IAH2, 2015_IAH3, 2015_IAH4 removed because no phenotypic data present in the final hybrid pheno files
-
 df<-plyr::ldply(dd,data.frame)
-colnames(df)<-c('Year_Exp','Day.of.Year')
-df<-merge(df,daily_weather,by=c('Year_Exp','Day.of.Year'),all.x = T)
+colnames(df)<-colnames(daily_weather)[c(1:2,4:24)]
 daily_weather=df
 rm(df,dd)
+
+#Add months and day
+daily_weather$month <- with(daily_weather, format(strptime(paste(Year, Day.of.Year), format = "%Y %j"), '%m'))
+daily_weather$day <- with(daily_weather, format(strptime(paste(Year, Day.of.Year), format = "%Y %j"), '%d'))
+
 
 
 #########################################
@@ -163,7 +172,7 @@ j<-weather%>%
 
 
 #Add this daily rainfall sum to the daily_weather table
-daily_weather<-merge(daily_weather,j,by=c('Day.of.Year','Year_Exp'),all.x = T)
+daily_weather<-merge(daily_weather,unique(j),by=c('Day.of.Year','Year_Exp'),all.x = T)
 
 
 #Second Control range: daily values
@@ -184,39 +193,27 @@ list_yearexp=list()
 daily_weather$stationID_NOAA=NA
 daily_weather$dist=NA
 cc=1
-#GSODR::update_station_list()
+
 for (j in unique(daily_weather$Year_Exp)) {
   print(j)
-  year=unique(daily_weather[daily_weather$Year_Exp==j,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'Year']))]
-  longitude=unique(daily_weather[daily_weather$Year_Exp==j,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'long']))]
-  latitude=unique(daily_weather[daily_weather$Year_Exp==j,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'lat']))]
+  year=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'Year']))])
+   
+  longitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'long']))])
+  latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'lat']))])
   
-  #lat_lon_df <- data.frame(id = j,
-  #                         latitude = latitude,
-  #                         longitude = longitude)
-  
-  #####
-  #list_yearexp[[cc]]=GSODR::nearest_stations(LAT = latitude,LON = longitude,distance=30)
-  #download_data=GSODR::get_GSOD(year,station = list_yearexp[[cc]])
-  
-  #for (s in 1:nrow(daily_weather[daily_weather$Year_Exp==j,])) {
-  #  if (daily_weather[s,'flagged_rain']=='flagged'){
-  #    day=daily_weather[s,'Day.of.Year']
-  #    print(download_data[download_data$YDAY==day,'PRCP'])
-  #    daily_weather[s,'sum_rainfall']==download_data[download_data$YDAY==day,'PRCP']
-   # }
-  #}
-  ####
-  
-  ####
+  #Finding the closest stations in a radius of 30 km and select those with PRCP data
   stations_close=as.data.frame(meteo_distance(stations,latitude,longitude,radius = 30))
   stations_close<-filter(stations_close,element=='PRCP')
+  #Choosing the closest to the field location
   dist=unique(stations_close[stations_close$distance==min(stations_close$distance),'distance'])
-  print(dist)
+  
   id_stations=unique(stations_close[stations_close$distance==min(stations_close$distance),'id'])
-  date_start=paste(year,'-01-01',sep = '')
-  date_end=paste(year,'-12-31',sep = '')
-  #id_stations<-id_stations[grep('USW',id_stations)]
+  
+  date_start=as.Date(as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'Date.Planted'])),origin=paste(year-1,'12','31',sep = '-'))
+  date_end=as.Date(as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'Date.Harvested'])),origin=paste(year-1,'12','31',sep = '-'))
+
+  
+  #Downloading the data for the growing season
   download_data<-data.frame('prcp'=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='PRCP',startdate = date_start,enddate = date_end,limit = 500)$data$value,'YDAY'=NA)
   download_data$YDAY<-1:nrow(download_data)
   
