@@ -219,3 +219,19 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
 
 
 
+
+
+#Step test vary according to the measurements interval: at most stations: semi-hourly, but not always the case
+if (daily_weather$daily_interval_measurements==48)
+  
+  
+  
+  daily_weather$missing_obs_temperature=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(which(is.na(x))))[,3]
+
+
+#weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
+#                          FUN=function(x) c(NA, diff(x) / tail(x, -1))))
+weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
+                                         FUN=function(x) c(NA, diff(x) )))
+
+
