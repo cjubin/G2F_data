@@ -112,98 +112,6 @@ daily_weather<-merge(daily_weather,unique(j),by=c('Day.of.Year','Year_Exp'),all.
 
 
 
-######IMPUTE temp MISSING VALUES #####
-
-daily_weather=arrange(daily_weather,Year,Field.Location,Day.of.Year)
-
-daily_weather$stationID_NOAA=NA
-daily_weather$dist=NA
-cc=1
-par(mfrow=c(2,2))
-`%notin%` <- Negate(`%in%`)
-
-for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c('2014_ONH1','2014_ONH2','2015_ONH1','2015_ONH2','2016_ONH1','2016_ONH2')]) {
-  print(j)
-  year=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'Year']))])
-  date_start=as.Date(as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'Date.Planted'])),origin=paste(year-1,'12','31',sep = '-'))
-  date_end=as.Date(as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'Date.Harvested'])),origin=paste(year-1,'12','31',sep = '-'))
-  longitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'long']))])
-  latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'lat']))])
-  
-  #Finding the closest stations in a radius of 30 km and select those with PRCP data
-  stations_close=as.data.frame(meteo_distance(stations,latitude,longitude,radius = 50))
-  stations_close<-filter(stations_close,element=='TEMP')
-  
-  #Choosing the closest to the field location with all the dates available
-  stations_close<-arrange(stations_close,distance)
-  station=vector()
-  for (l in 1:nrow(stations_close)) {
-    id_stations=stations_close[l,'id']
-    values= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='PRCP',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    if(length(values)==length(yday(date_start):yday(date_end))){
-      station= id_stations
-      break}
-  }
-  
-  if(length(station)==0){
-    for (l in 1:nrow(stations_close)) {
-      id_stations=stations_close[l,'id']
-      values= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='PRCP',startdate = date_start,enddate = date_end,limit = 500)$data$value
-      if(length(values)>length(yday(date_start):yday(date_end))-5){
-        station= id_stations
-        break}
-    }
-  }
-  
-  dist=stations_close[stations_close$id==station,'distance']
-  
-  daily_weather[daily_weather$Year_Exp==j,'stationID_NOAA']=station
-  daily_weather[daily_weather$Year_Exp==j,'dist']=round(dist,2)
-  
-  
-  
-  
-  #Downloading the data for the growing season
-  ncdc_data=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid='PRCP',startdate = date_start,enddate = date_end,limit = 500)$data
-  download_data<-data.frame('prcp'=ncdc_data$value,'YDAY'=yday(ncdc_data$date),'month'=month(ncdc_data$date))
-  
-  
-  
-  for (s in 1:nrow(daily_weather[daily_weather$Year_Exp==j,])) {
-    if (daily_weather[daily_weather$Year_Exp==j,'flagged_temp'][s]=='flagged'){
-      day=as.numeric(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'][s])
-      #print(download_data[download_data$YDAY==day,'prcp'])
-      daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'sum_temp']=download_data[download_data$YDAY==day,'prcp']/10
-      daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'stationID_NOAA']=id_stations
-      daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'dist']=dist
-    }
-  }
-  
-  
-  
-  data_plot=as.data.frame(cbind('month'=daily_weather[daily_weather$Year_Exp==j,'month'],'station_NCDC'=as.vector(download_data[match(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'],download_data$YDAY),'prcp'])/10,'field_station'=daily_weather[daily_weather$Year_Exp==j,'sum_temp']))
-  
-  data_plot$month=as.factor(data_plot$month)
-  
-  data_sum <- plyr::ddply(data_plot, "month",
-                          transform, total_station_NOAA=sum(station_NCDC))
-  data_sum <- plyr::ddply(data_sum, "month",
-                          transform, total_station_field=sum(field_station))
-  data_sum<-unique(data_sum[,c(1,4,5)])
-  barplot(
-    t(as.matrix(data_sum[, c(2, 3)])),
-    beside = T,
-    names.arg = data_sum$month,
-    legend.text = T,
-    ylim = c(0, max(data_sum[, c(2, 3)],na.rm = T) + 50),
-    ylab = "temp (mm)",
-    xlab = "Month",
-    main = paste(j , '\n', 'Distance field to NOAA station: ', round(dist, 2),'km','\n','Nb flagged values: ',length(which(daily_weather[daily_weather$Year_Exp==j,'flagged_temp']=='flagged')), sep = '')
-  )
-  
-  
-  cc=cc+1
-}
 
 
 
@@ -215,23 +123,5 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
 
 
 
-
-
-
-
-
-
-#Step test vary according to the measurements interval: at most stations: semi-hourly, but not always the case
-if (daily_weather$daily_interval_measurements==48)
-  
-  
-  
-  daily_weather$missing_obs_temperature=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(which(is.na(x))))[,3]
-
-
-#weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
-#                          FUN=function(x) c(NA, diff(x) / tail(x, -1))))
-weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
-                                         FUN=function(x) c(NA, diff(x) )))
 
 
