@@ -21,11 +21,11 @@ options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
 
 ##Import 5 years of weather data
 setwd("~/Final_datasets_G2F/ALL_WEATHER")
-weather2014=read.csv('g2f_2014_weather.csv',header = T,sep = ',')
-weather2015=read.csv('g2f_2015_weather.csv',header = T,sep = ',')
-weather2016=read.csv('g2f_2016_weather_data.csv',header = T,sep = ',')
-weather2017=read.csv('g2f_2017_weather_data.csv',header = T,sep = ',')
-weather2018=read.csv('g2f_2018_weather_clean.csv',header = T,sep = ',')[1:28]
+weather2014=read.csv('g2f_2014_weather.csv',header = T,sep = ',',na.strings=c("","NA"))
+weather2015=read.csv('g2f_2015_weather.csv',header = T,sep = ',',na.strings=c("","NA"))
+weather2016=read.csv('g2f_2016_weather_data.csv',header = T,sep = ',',na.strings=c("","NA"))
+weather2017=read.csv('g2f_2017_weather_data.csv',header = T,sep = ',',na.strings=c("","NA"))
+weather2018=read.csv('g2f_2018_weather_clean.csv',header = T,sep = ',',na.strings=c("","NA","T"))[1:28]
 
 ####Setting the exact same columns names across the 5 datasets: changing names, removal of some columns + Add Year column if not present
 colnames(weather2014)[which(colnames(weather2014)%notin%colnames(weather2015))]
@@ -274,6 +274,7 @@ field2015$Year_Exp=paste(field2015$Year,field2015$Experiment,sep = '_')
 field2016$Year_Exp=paste(field2016$Year,field2016$Experiment,sep = '_')
 field2017$Year_Exp=paste(field2017$Year,field2017$Experiment,sep = '_')
 field2018$Year_Exp=paste(field2018$Year,field2018$Experiment,sep = '_')
+field2018[field2018$Year_Exp=='2018_MOH1- rep 1'|field2018$Year_Exp=='2018_MOH1- rep 2','Year_Exp']<-'2018_MOH1'
 colnames(field2015)[c(10)]=c('Previous.crop')
 colnames(field2016)[c(13)]=c('Previous.crop')
 colnames(field2017)[c(16)]=c('Previous.crop')
@@ -292,51 +293,13 @@ for (j in 1:nrow(agrodata)) {
   if (agrodata[j,'Previous.crop']%in%c('Lima beans followed by rye cover crop')){agrodata[j,'Previous.crop']<-'lima beans'}
   if (agrodata[j,'Previous.crop']%in%c('Sorghum')){agrodata[j,'Previous.crop']<-'sorghum'}
 }
-
+agrodata[which(agrodata$Previous.crop==''),'Previous.crop']<-NA
 
 #Final merge of previous crop data with global weather table
-weather=merge(weather,agrodata[,c(1,3)],by='Year_Exp',all.x=T)
-
-##############################################################################
-################################WEATHER DATA PROCESSING#######################
-##############################################################################
-
-
-
-
-##CREATE A DAILY WEATHER DATASET
-
-
-daily_weather=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(x))
-daily_weather$missing_obs_temp=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(which(is.na(x))))[,3]
-
-
-##Add beginning and end of the growing season
-growingseason=read.table("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/planting_harvest_dates/growingseason.txt",header = T)
-
-
-####CHECK INSTANTANEOUS WEATHER DATA#####
-#The aim of the step test is to verify the rate of change of instantaneous data (detection of unrealistic
-#jumps in values or dead band caused by blocked sensors). 
-
-
-##TEMPERATURE
-#Range test
-weather[which(weather$Temperature..C.<(-30)),]<-NA
-weather[which(weather$Temperature..C.>50),]<-NA
-
+weather$Previous.crop=agrodata[match(weather$Year_Exp,agrodata$Year_Exp),'Previous.crop']
+##Order weather data frame
 weather <-arrange(weather,Year_Exp,Day.of.Year,Time.Local.)
-#weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
-#                          FUN=function(x) c(NA, diff(x) / tail(x, -1))))
-weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
-                          FUN=function(x) c(NA, diff(x) )))
 
+weather[weather=='']<-NA
+write.table(weather,'~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/weather_semihourly.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
-
-m<-weather>%> 
-
-
-
-
-colnames(daily_weather)=c('Day.of.Year','Year_Exp','mean.temperature')
-daily_weather$=NA
