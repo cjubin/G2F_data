@@ -128,7 +128,7 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
   longitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'long']))])
   latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==j,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==j,'lat']))])
   
-  #Finding the closest stations in a radius of 30 km and select those with PRCP data
+  #Finding the closest stations in a radius of 50 km and select those with PRCP data
   stations_close=as.data.frame(meteo_distance(stations,latitude,longitude,radius = 50))
   stations_close<-filter(stations_close,element=='PRCP')
   
@@ -143,7 +143,7 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
     if(length(values)==length(yday(date_start):yday(date_end))){
       return(id_stations)
     }
-    else(return(NULL))
+    else{return(NULL)}
   }
   
   find_station2=function(x){
@@ -152,7 +152,7 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
     if(length(values)>length(yday(date_start):yday(date_end))-5){
       return(id_stations)
     }
-    else(return(NULL))
+    else{return(NULL)}
   }
   
   safe_find_function<- function(x) {
