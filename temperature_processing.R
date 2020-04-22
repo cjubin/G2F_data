@@ -77,44 +77,67 @@ temp[temp$all_missing_temp==TRUE,'ratio']=0
 weather=merge(weather,temp[,c(1:2,7)],by=c('Day.of.Year','Year_Exp'),all.x=T)
 
 daily_weather=merge(daily_weather,temp[,c(1:3,7)],by=c('Day.of.Year','Year_Exp'),all.x=T)
-daily_weather=merge(daily_weather,already_imputed,by=c('Day.of.Year','Year_Exp'),all.x=T)
-
-#Minimum/ maximum  allowed  variability  of  an  instantaneous  value: step test and persistence test
-
-<-weather%>%
-  filter(flagged_temp%in%'OK')%>%
-  group_by(Day.of.Year,Year_Exp)%>%
 
 
 
-#Daily mean,max and min computed for not flagged values:
+#Daily mean,max and min computed for unflagged values:
 
 
 maxT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
-  dplyr::mutate(max_temp=max(Temperature..C,na.rm = T))%>%
+  dplyr::mutate(max_temp=max(Temperature..C.,na.rm = T))%>%
   select(Day.of.Year,Year_Exp,max_temp)
+maxT<-unique(maxT)
 minT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
-  dplyr::mutate(min_temp=min(Temperature..C,na.rm = T))%>%
+  dplyr::mutate(min_temp=min(Temperature..C.,na.rm = T))%>%
   select(Day.of.Year,Year_Exp,min_temp)
+minT<-unique(minT)
+temperatures=merge(maxT,minT,by=c('Day.of.Year','Year_Exp'),all.x=T)
 
+temperatures=arrange(temperatures,Year_Exp,Day.of.Year)
+
+
+
+#Internal consistency test: Tmax(d) > Tmin(d-1) + Tmin(d) < Tmax(d-1)
+library(data.table)
+nm1 <- c('max_temp','min_temp')
+nm2 <- paste("lag", nm1, sep=".")
+
+library(dplyr)
+test  <- 
+  temperatures %>%
+  group_by(Year_Exp) %>%
+  mutate(lag = dplyr::lag(min_temp, n = 1, default = NA))%>%
+  mutate(diff = max_temp-lag)%>%
+  mutate(lag2 = dplyr::lag(max_temp, n = 1, default = NA))%>%
+  mutate(diff2 = min_temp-lag2)%>%
+  filter(diff>0)%>%
+  filter(diff2<0)%>%
+  select(Year_Exp,Day.of.Year,min_temp,max_temp)
+
+temperatures<-test
+
+
+#Mean temperature: WMO (2010) recommends use of this estimator:'Even though this method is not the best statistical approximation, its consistent use satisfies the comparative purpose of normal'
+
+temperatures$mean_temp=(temperatures$max_temp+temperatures$min_temp)/2
 
 
 
 #Add this daily temp sum to the daily_weather table
-daily_weather<-merge(daily_weather,unique(j),by=c('Day.of.Year','Year_Exp'),all.x = T)
+daily_weather<-merge(daily_weather,temperatures,by=c('Day.of.Year','Year_Exp'),all.x = T)
+daily_weather=arrange(daily_weather,Year,Year_Exp,Day.of.Year)
 
 
-#Second Control range: daily values
 
 
 
 ######IMPUTE temp MISSING VALUES #####
 
-daily_weather=arrange(daily_weather,Year,Field.Location,Day.of.Year)
+
 
 daily_weather$stationID_NOAA=NA
 daily_weather$dist=NA
@@ -218,20 +241,5 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
 
 
 
-
-
-
-#Step test vary according to the measurements interval: at most stations: semi-hourly, but not always the case
-if (daily_weather$daily_interval_measurements==48)
-  
-  
-  
-  daily_weather$missing_obs_temperature=aggregate(weather[,18],by=list(weather$Day.of.Year, weather$Year_Exp),FUN=function(x)length(which(is.na(x))))[,3]
-
-
-#weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
-#                          FUN=function(x) c(NA, diff(x) / tail(x, -1))))
-weather$growth_TEMP <- with(weather, ave(Temperature..C., Year_Exp,
-                                         FUN=function(x) c(NA, diff(x) )))
 
 
