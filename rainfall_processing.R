@@ -208,8 +208,8 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
   for (s in 1:nrow(daily_weather[daily_weather$Year_Exp==j,])) {
     if (daily_weather[daily_weather$Year_Exp==j,'flagged_rain'][s]=='flagged'){
       day=as.numeric(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'][s])
-      if (length(download_data[download_data$YDAY==day,'prcp'])!=0){
-        daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'sum_rainfall']=download_data[download_data$YDAY==day,'prcp']/10
+      if (length(download_data_station1[download_data_station1$YDAY==day,'prcp'])!=0){
+        daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'sum_rainfall']=download_data_station1[download_data_station1$YDAY==day,'prcp']/10
         daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'stationID_NOAA']=station
         daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'dist']=round(dist,2)
       }
@@ -240,6 +240,8 @@ for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c(
     ylim = c(0, max(data_sum[, c(2, 3)],na.rm = T) + 50),
     ylab = "Rainfall (mm)",
     xlab = "Month",
+    cex.main=0.7,
+    args.legend = list(x = 'topright', bty='n'),
     main = paste(j , '\n', 'Distance field to NOAA station 1: ', round(dist, 2),'km','\n','Distance field to NOAA station 2: ', round(dist2, 2),'km','\n','Nb flagged values: ',length(which(daily_weather[daily_weather$Year_Exp==j,'flagged_rain']=='flagged')), sep = '')
   )
   
