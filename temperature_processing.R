@@ -91,14 +91,14 @@ daily_weather=merge(daily_weather,temp[,c(1:3,7)],by=c('Day.of.Year','Year_Exp')
 maxT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
-  dplyr::mutate(max_temp=max(Temperature..C.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,max_temp)
+  dplyr::mutate(TMAX=max(Temperature..C.,na.rm = T))%>%
+  select(Day.of.Year,Year_Exp,TMAX)
 maxT<-unique(maxT)
 minT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
-  dplyr::mutate(min_temp=min(Temperature..C.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,min_temp)
+  dplyr::mutate(TMIN=min(Temperature..C.,na.rm = T))%>%
+  select(Day.of.Year,Year_Exp,TMIN)
 minT<-unique(minT)
 temperatures=merge(maxT,minT,by=c('Day.of.Year','Year_Exp'),all.x=T)
 
@@ -108,27 +108,27 @@ temperatures=arrange(temperatures,Year_Exp,Day.of.Year)
 
 #Internal consistency test: Tmax(d) > Tmin(d-1) + Tmin(d) < Tmax(d-1)
 library(data.table)
-nm1 <- c('max_temp','min_temp')
+nm1 <- c('TMAX','TMIN')
 nm2 <- paste("lag", nm1, sep=".")
 
 library(dplyr)
 test  <- 
   temperatures %>%
   group_by(Year_Exp) %>%
-  mutate(lag = dplyr::lag(min_temp, n = 1, default = NA))%>%
-  mutate(diff = max_temp-lag)%>%
-  mutate(lag2 = dplyr::lag(max_temp, n = 1, default = NA))%>%
-  mutate(diff2 = min_temp-lag2)%>%
+  mutate(lag = dplyr::lag(TMIN, n = 1, default = NA))%>%
+  mutate(diff = TMAX-lag)%>%
+  mutate(lag2 = dplyr::lag(TMAX, n = 1, default = NA))%>%
+  mutate(diff2 = TMIN-lag2)%>%
   filter(diff>0)%>%
   filter(diff2<0)%>%
-  select(Year_Exp,Day.of.Year,min_temp,max_temp)
+  select(Year_Exp,Day.of.Year,TMIN,TMAX)
 
 temperatures<-test
 
 
 #Mean temperature: WMO (2010) recommends use of this estimator:'Even though this method is not the best statistical approximation, its consistent use satisfies the comparative purpose of normal'
 
-temperatures$mean_temp=(temperatures$max_temp+temperatures$min_temp)/2
+temperatures$mean_temp=(temperatures$TMAX+temperatures$TMIN)/2
 
 
 
@@ -152,7 +152,7 @@ par(mfrow=c(2,2))
 
 
 
-impute_temp_idw=function(x=Year_Exp,radius=50){
+impute_kriging_withGHCND=function(x=Year_Exp,radius=50,datatypeid='TMIN'){
   print(x)
   #Retrieve information about the experiment
   year=as.numeric(unique(daily_weather[daily_weather$Year_Exp==x,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==x,'Year']))])
@@ -217,59 +217,83 @@ impute_temp_idw=function(x=Year_Exp,radius=50){
       latitude=unique(stations_close[stations_close$id==station,c('latitude')])
       
       
-      d=matrix(c('station'=station,'longitude'=longitude,'latitude'=latitude,values),nrow = 1)
-      colnames(d)<-c('station','longitude','latitude',dates)
+      d=cbind('station'=station,'longitude'=longitude,'latitude'=latitude,values,dates)
+      
       
       return(d)
     }
+      tmaxdata=as.data.frame(do.call('rbind',lapply(list_stations_no_missingdates, function(x)download_data(x,datatypeid = 'TMAX'))))
+      tmindata=as.data.frame(do.call('rbind',lapply(list_stations_no_missingdates, function(x)download_data(x,datatypeid = 'TMIN'))))
       
     
-    tmaxdata=do.call('rbind',lapply(list_stations_no_missingdates, function(x)download_data(x,datatypeid = 'TMAX')))
-    tmindata=do.call('rbind',lapply(list_stations_no_missingdates, function(x)download_data(x,datatypeid = 'TMIN')))
-    
-  }
+    }
   
   
   if(length(list_stations_no_missingdates)==0) {
     list_stations_possible_missingdates=unique(unlist(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function2))))
+    tmaxdata=as.data.frame(do.call('rbind',lapply(list_stations_possible_missingdates, function(x)download_data(x,datatypeid = 'TMAX'))))
+    tmindata=as.data.frame(do.call('rbind',lapply(list_stations_possible_missingdates, function(x)download_data(x,datatypeid = 'TMIN'))))
     
-    download_data=function(station,datatypeid){
-      values=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid=datatypeid,startdate = date_start,enddate = date_end,limit = 500)$data$value/10
-      dates=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid=datatypeid,startdate = date_start,enddate = date_end,limit = 500)$data$date
-      dist=stations_close[stations_close$id==station,c('distance')]
-      longitude=unique(stations_close[stations_close$id==station,c('longitude')])
-      latitude=unique(stations_close[stations_close$id==station,c('latitude')])
-      
-      
-      d=matrix(c('station'=station,'longitude'=longitude,'latitude'=latitude,values),nrow = 1)
-      colnames(d)<-c('station','longitude','latitude',dates)
-      
-      return(d)
-    }
-    
-    
-    tmaxdata=do.call('rbind',lapply(list_stations_possible_missingdates, function(x)download_data(x,datatypeid = 'TMAX')))
-    tmindata=do.call('rbind',lapply(list_stations_possible_missingdates, function(x)download_data(x,datatypeid = 'TMIN')))
-                     
   }
   
   
   ####Ordinary kriging####
   
-  tmindata=as.data.frame(tmindata)
-  tmaxdata=as.data.frame(tmaxdata)
-  tmindata$longitude=as.numeric(tmindata$longitude)
-  tmindata$latitude=as.numeric(tmindata$latitude)
-  tmaxdata$longitude=as.numeric(tmaxdata$longitude)
-  tmaxdata$latitude=as.numeric(tmaxdata$latitude)
   
+  tmindata$values=as.numeric(as.vector(tmindata$values))
+  tmindata$longitude=as.numeric(as.vector(tmindata$longitude))
+  tmindata$latitude=as.numeric(as.vector(tmindata$latitude))
+  tmaxdata$values=as.numeric(as.vector(tmaxdata$values))
+  tmaxdata$longitude=as.numeric(as.vector(tmaxdata$longitude))
+  tmaxdata$latitude=as.numeric(as.vector(tmaxdata$latitude))
+  tmindata=arrange(tmindata,dates)
   #tmindata
-  sp::coordinates(tmindata)=c('longitude','latitude')
-  proj4string(tmindata) = "+proj=longlat +datum=WGS84"
+  sub_tmin=tmindata
+  sp::coordinates(sub_tmin)=c('longitude','latitude')
+  proj4string(sub_tmin) = "+proj=longlat +datum=WGS84"
+  #projection(sub_tmin)=CRS("+init=epsg:4326")
+  
+  #Transform into Mercator Projection
+  tempmin.UTM <- spTransform(sub_tmin,CRS("+init=epsg:3395")) 
+  
+  tempminSP <- SpatialPoints(tempmin.UTM@coords,CRS("+init=epsg:3395"))
   
   
-  k <- gstat(formula=OZDLYAV~1, locations=aq, model=fve)
-  kp <- predict(k, g)
+  tempminDF <- data.frame(values=tempmin.UTM$values) 
+  tempminTM <- as.POSIXct(date(tempmin.UTM$dates))
+  
+  timeDF <- STIDF(tempminSP,tempminTM,data=tempminDF) 
+  
+  
+  #variogram
+  var <- variogramST(values~1,data=timeDF,tunit="days",assumeRegular=F,na.omit=T) 
+  
+  plot(var,map=F)
+  
+  #Sum metric model
+  sumMetric <- vgmST("simpleSumMetric",space = vgm(5,"Sph", 500, 0),time = vgm(500,"Sph", 500, 0), joint = vgm(1,"Sph", 500, 0), nugget=1, stAni=500) 
+  
+  #Automatic fit
+  fitted.stvgm=fit.StVariogram(var,sumMetric,tunit="days",method="L-BFGS-B")
+  attr(fitted.stvgm, "MSE")
+  
+  #Prediction grid
+  field=vector(mode = 'numeric',length = 2)
+  field<-c(longitude,latitude)
+  
+  field=as.data.frame(matrix(field,ncol = 2))
+  colnames(field)<-c('longitude','latitude')
+  sp::coordinates(field)=c('longitude','latitude')
+  proj4string(field) = "+proj=longlat +datum=WGS84"
+  field_grid<- spTransform(field,CRS("+init=epsg:3395")) 
+  tm.grid<-seq(as.POSIXct(date_start,tz="CET"),as.POSIXct(date_end,tz="CET"),by='days')
+  grid.ST <- STF(field_grid,tm.grid) 
+  pred<-krigeST(values~1,data=timeDF,modelList =fitted.stvgm,newdata = grid.ST )
+  predicted.values=pred@data$var1.pred
+  cor(predicted,,use = 'complete.obs')
+  
+  
+  
   
   
   if (length(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function)))!=0){
