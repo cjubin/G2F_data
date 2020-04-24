@@ -18,8 +18,12 @@
 impute_kriging_withGHCND <- function(Year_Exp,radius=100,meteo_variable,daily_weather=daily_weather) {
   library(rnoaa)
   library(raster)
+  library(mapdata)
+  library(maps)
+  library(maptools)
   library(sp)
   library(gstat)
+  library(xts)
   library(spacetime)
   library(raster)
   library(rgdal)
