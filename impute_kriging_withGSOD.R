@@ -49,9 +49,9 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   stations_close$yearend<-substr(stations_close$end,0,nchar(stations_close$end)-4)
   stations_close<-filter(stations_close,yearstart<2013&yearend>2019)
   
-  #Download data from stations exhibiting the meteo variable of interest
+  #Download data from stations exhibiting the meteo variable of interest and set data.frame for kriging 
   
-  #Download files of the stations of interest from the ncei noaa server - some stations not 
+  #Download individual files for the stations of interest (selected before) from the ncei noaa server ot 
   url_list <-
     CJ(year, stations_close$idstation, sorted = FALSE)[, paste0(
       "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/",
