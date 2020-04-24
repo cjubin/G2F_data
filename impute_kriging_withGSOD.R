@@ -186,3 +186,29 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   
   
 }
+
+
+safe_impute_function<- function(y,radius,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table) {
+  tryCatch(
+    impute_kriging_withGSOD(Year_Exp = y,radius=radius,meteo_variable_GSOD = meteo_variable_GSOD,meteo_variable_in_table=meteo_variable_in_table,daily_weather = daily_weather ),
+    #warning = function(w) NULL,
+    error = function(e) NULL
+  )
+}
+
+
+
+all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
+                                                 c('2014_ONH1',
+                                                   '2014_ONH2',
+                                                   '2015_ONH1',
+                                                   '2015_ONH2',
+                                                   '2016_ONH1',
+                                                   '2016_ONH2')]
+
+require(doParallel)
+workers <- makeCluster(3) 
+registerDoParallel(workers)
+results=mclapply(all_experiments[1:3],
+                 function(x)
+                   safe_impute_function(x,radius=50,meteo_variable_GSOD = 'MIN',meteo_variable_in_table  ='TMIN',daily_weather = daily_weather))
