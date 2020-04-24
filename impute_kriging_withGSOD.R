@@ -18,11 +18,16 @@
 impute_kriging_withGSOD <- function(Year_Exp,radius=100,meteo_variable_GSOD,daily_weather=daily_weather) {
   library(rnoaa)
   library(raster)
+  library(mapdata)
+  library(maps)
+  library(maptools)
   library(sp)
   library(gstat)
+  library(xts)
   library(spacetime)
   library(raster)
   library(rgdal)
+  source('C:/Users/cathyjubin/Documents/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/fahrenheit_to_celsius.R')
   options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
   
   print(Year_Exp)
@@ -98,22 +103,31 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=100,meteo_variable_GSOD,dail
   all_data<-plyr::compact(data_frames)
   all_data=as.data.frame(do.call('rbind',all_data))
     
-  d=cbind('station'=all_data$STATION,'longitude'=all_data$LONGITUDE,'latitude'=all_data$LATITUDE,'values'=all_data[,colnames(all_data)%in%meteo_variable_GSOD],'dates'=as.character(as.Date(all_data$DATE)))
+  d = cbind(
+    'station' = all_data$STATION,
+    'longitude' = all_data$LONGITUDE,
+    'latitude' = all_data$LATITUDE,
+    'values' = all_data[, colnames(all_data) %in% meteo_variable_GSOD],
+    'dates' = as.character(as.vector(all_data$DATE))
+  )
   d=as.data.frame(d) 
   
   d$longitude=as.numeric(as.vector(d$longitude))  
   d$latitude=as.numeric(as.vector(d$latitude)) 
-  
-  if (meteo_variable_GSOD)
   d$values=as.numeric(as.vector(d$values))
+  
+  if (meteo_variable_GSOD%in%c('TEMP', 'DEWP', 'MAX', 'MIN')) {
+    d$values <- fahrenheit_to_celsius(d$values)
+  }
+  
   d$dates=as.Date(d$dates)
-  all_data=arrange(d,dates)
+  d=arrange(d,dates)
   print('Data from GSOD stations prepared')
   
   ########################
   ####Ordinary kriging####
   
-  sub=all_data
+  sub=d
   sp::coordinates(sub)=c('longitude','latitude')
   proj4string(sub) = "+proj=longlat +datum=WGS84"
   #projection(sub)=CRS("+init=epsg:4326")
