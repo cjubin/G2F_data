@@ -15,7 +15,7 @@
 #' 
 
 
-impute_kriging_withGSOD <- function(Year_Exp,radius=100,meteo_variable_GSOD,daily_weather=daily_weather) {
+impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table) {
   library(rnoaa)
   library(raster)
   library(mapdata)
@@ -39,10 +39,10 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=100,meteo_variable_GSOD,dail
   latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat']))])
   
   #Values recorded for this variable at the field station
-  field_values=daily_weather[daily_weather$Year_Exp==Year_Exp,meteo_variable_GSOD]
+  field_values=daily_weather[daily_weather$Year_Exp==Year_Exp,meteo_variable_in_table]
   
   #Finding the closest stations in a certain radius and select those for which coverage period 2013-2019 is sure
-  stations_close=as.data.frame(rnoaa::isd_stations_search(lat =latitude, lon = longitude, radius = 100))
+  stations_close=as.data.frame(rnoaa::isd_stations_search(lat =latitude, lon = longitude, radius = radius))
   stations_close$idstation=paste(stations_close$usaf,stations_close$wban,sep='')
   stations_close<-arrange(stations_close,distance)
   stations_close$yearstart<-substr(stations_close$begin,0,nchar(stations_close$begin)-4)
@@ -149,12 +149,13 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=100,meteo_variable_GSOD,dail
   
   plot(var,map=F)
   
-  #Simple Sum metric model
-  simplesumMetric <- vgmST("simpleSumMetric",space = vgm(5,"Sph", 500, 0),time = vgm(500,"Sph", 500, 0), joint = vgm(1,"Sph", 500, 0), nugget=1, stAni=500) 
-  
+  #Sum metric model
+  sumMetric <-vgmST("sumMetric", space = vgm(psill=5,"Sph", range=500, nugget=0),time = vgm(psill=500,"Sph", range=500, nugget=0), joint = vgm(50,"Mat", range=500, nugget=10), stAni=1) 
   #Automatic fit
-  fitted.stvgm=fit.StVariogram(var,simplesumMetric,tunit="days",method="L-BFGS-B")
+  fitted.stvgm=fit.StVariogram(var,sumMetric)
   attr(fitted.stvgm, "MSE")
+  par(mfrow=c(2,1))
+  plot(var,fitted.stvgm,map=F) 
   
   #Prediction grid
   field=vector(mode = 'numeric',length = 2)
