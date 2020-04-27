@@ -48,13 +48,13 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   
   #Download data from stations exhibiting the meteo variable of interest and set data.frame for kriging 
   
-  #Download individual files for the stations of interest (selected before) from the ncei noaa server ot 
+  #Download individual files for the stations of interest (selected before) from the ncei noaa server 
   url_list <-
     CJ(year, stations_close$idstation, sorted = FALSE)[, paste0(
       "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/",
       year,
       "/",
-      stations,
+      stations_close$idstation,
       ".csv"
     )]
   
@@ -81,7 +81,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   files_stations <-
     paste0(tempdir(),
            "/",
-           stations,
+           stations_close$idstation,
            ".csv")
   #List of the csv files in the temporary folder
   GSOD_list <-
@@ -154,7 +154,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   par(mfrow=c(2,1))
   plot(var,fitted.stvgm,map=F) 
   
-  #Prediction grid
+  #Prediction grid: growing season for the field experiment described by Year_Exp
   field=vector(mode = 'numeric',length = 2)
   field<-c(longitude,latitude)
   

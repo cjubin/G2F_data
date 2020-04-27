@@ -150,355 +150,50 @@ cc=1
 par(mfrow=c(2,2))
 `%notin%` <- Negate(`%in%`)
 
-
-
-impute_kriging_withGHCND=function(x=Year_Exp,radius=50,datatypeid='TMIN'){
-  print(x)
-  #Retrieve information about the experiment
-  year=as.numeric(unique(daily_weather[daily_weather$Year_Exp==x,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==x,'Year']))])
-  date_start=as.Date(as.numeric(unique(daily_weather[daily_weather$Year_Exp==x,'Date.Planted'])),origin=paste(year-1,'12','31',sep = '-'))
-  date_end=as.Date(as.numeric(unique(daily_weather[daily_weather$Year_Exp==x,'Date.Harvested'])),origin=paste(year-1,'12','31',sep = '-'))
-  longitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==x,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==x,'long']))])
-  latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==x,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==x,'lat']))])
-  
-  #Finding the closest stations in a certain radius and select lines (stations) with TEMP data
-  stations_close=as.data.frame(meteo_distance(stations,latitude,longitude,radius = radius))
-  stations_close<-filter(stations_close,element%in%c('TMAX','TMIN'))
-  stations_close<-arrange(stations_close,distance)
-  
-  #Some stations do not exhibit data for all days requested (days of the growing season)
-  find_station=function(x){
-    id_stations=stations_close[x,'id']
-    values_tmax= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMAX',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values_tmin= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values=data.frame(values_tmax,values_tmin)
-    if(nrow(values)==length(yday(date_start):yday(date_end))){
-      return(id_stations)
-    }
-    else{return(NULL)}
-  }
-  
-  find_station2=function(x){
-    id_stations=stations_close[x,'id']
-    values_tmax= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMAX',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values_tmin= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values=data.frame(values_tmax,values_tmin)
-    if(nrow(values)>length(yday(date_start):yday(date_end))-5){
-      return(id_stations)
-    }
-    else{return(NULL)}
-  }
-  
-  safe_find_function<- function(x) {
-    tryCatch(
-      find_station(x),
-      warning = function(w) NULL,
-      error = function(e) NULL
-    )
-  }
-  
-  safe_find_function2<- function(x) {
-    tryCatch(
-      find_station2(x),
-      warning = function(w) NULL,
-      error = function(e) NULL
-    )
-  }
-  
-  list_stations_no_missingdates=unique(unlist(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function))))
-  
-  
-  if(length(list_stations_no_missingdates)!=0) {
-    download_data=function(station,datatypeid){
-      values=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid=datatypeid,startdate = date_start,enddate = date_end,limit = 500)$data$value/10
-      dates=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid=datatypeid,startdate = date_start,enddate = date_end,limit = 500)$data$date
-      dist=stations_close[stations_close$id==station,c('distance')]
-      longitude=unique(stations_close[stations_close$id==station,c('longitude')])
-      latitude=unique(stations_close[stations_close$id==station,c('latitude')])
-      
-      
-      d=cbind('station'=station,'longitude'=longitude,'latitude'=latitude,values,dates)
-      
-      
-      return(d)
-    }
-      tmaxdata=as.data.frame(do.call('rbind',lapply(list_stations_no_missingdates, function(x)download_data(x,datatypeid = 'TMAX'))))
-      tmindata=as.data.frame(do.call('rbind',lapply(list_stations_no_missingdates, function(x)download_data(x,datatypeid = 'TMIN'))))
-      
-    
-    }
-  
-  
-  if(length(list_stations_no_missingdates)==0) {
-    list_stations_possible_missingdates=unique(unlist(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function2))))
-    tmaxdata=as.data.frame(do.call('rbind',lapply(list_stations_possible_missingdates, function(x)download_data(x,datatypeid = 'TMAX'))))
-    tmindata=as.data.frame(do.call('rbind',lapply(list_stations_possible_missingdates, function(x)download_data(x,datatypeid = 'TMIN'))))
-    
-  }
-  
-  
-  ####Ordinary kriging####
-  
-  
-  tmindata$values=as.numeric(as.vector(tmindata$values))
-  tmindata$longitude=as.numeric(as.vector(tmindata$longitude))
-  tmindata$latitude=as.numeric(as.vector(tmindata$latitude))
-  tmaxdata$values=as.numeric(as.vector(tmaxdata$values))
-  tmaxdata$longitude=as.numeric(as.vector(tmaxdata$longitude))
-  tmaxdata$latitude=as.numeric(as.vector(tmaxdata$latitude))
-  tmindata=arrange(tmindata,dates)
-  #tmindata
-  sub_tmin=tmindata
-  sp::coordinates(sub_tmin)=c('longitude','latitude')
-  proj4string(sub_tmin) = "+proj=longlat +datum=WGS84"
-  #projection(sub_tmin)=CRS("+init=epsg:4326")
-  
-  #Transform into Mercator Projection
-  tempmin.UTM <- spTransform(sub_tmin,CRS("+init=epsg:3395")) 
-  
-  tempminSP <- SpatialPoints(tempmin.UTM@coords,CRS("+init=epsg:3395"))
-  
-  
-  tempminDF <- data.frame(values=tempmin.UTM$values) 
-  tempminTM <- as.POSIXct(date(tempmin.UTM$dates))
-  
-  timeDF <- STIDF(tempminSP,tempminTM,data=tempminDF) 
-  
-  
-  #variogram
-  var <- variogramST(values~1,data=timeDF,tunit="days",assumeRegular=F,na.omit=T) 
-  
-  plot(var,map=F)
-  
-  #Sum metric model
-  sumMetric <- vgmST("simpleSumMetric",space = vgm(5,"Sph", 500, 0),time = vgm(500,"Sph", 500, 0), joint = vgm(1,"Sph", 500, 0), nugget=1, stAni=500) 
-  
-  #Automatic fit
-  fitted.stvgm=fit.StVariogram(var,sumMetric,tunit="days",method="L-BFGS-B")
-  attr(fitted.stvgm, "MSE")
-  
-  #Prediction grid
-  field=vector(mode = 'numeric',length = 2)
-  field<-c(longitude,latitude)
-  
-  field=as.data.frame(matrix(field,ncol = 2))
-  colnames(field)<-c('longitude','latitude')
-  sp::coordinates(field)=c('longitude','latitude')
-  proj4string(field) = "+proj=longlat +datum=WGS84"
-  field_grid<- spTransform(field,CRS("+init=epsg:3395")) 
-  tm.grid<-seq(as.POSIXct(date_start,tz="CET"),as.POSIXct(date_end,tz="CET"),by='days')
-  grid.ST <- STF(field_grid,tm.grid) 
-  pred<-krigeST(values~1,data=timeDF,modelList =fitted.stvgm,newdata = grid.ST )
-  predicted.values=pred@data$var1.pred
-  cor(predicted,,use = 'complete.obs')
-  
-  
-  
-  
-  
-  if (length(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function)))!=0){
-    list_stations=unique(unlist(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function))))
-    
-    
-    station=list_stations[1]
-    station_coords=stations_close[stations_close$id==station,c('longitude','latitude')]
-    if (list_stations>1){
-      station2= unique(list_stations[list_stations%notin%station][1])
-      station2_coords=unique(stations_close[stations_close$id==station2,c('longitude','latitude')])
-    }
-    
-  }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-}
-lapply(unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c('2014_ONH1','2014_ONH2','2015_ONH1','2015_ONH2','2016_ONH1','2016_ONH2')], safe_find_function)
+source('~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/impute_kriging_withGSOD.R')
 
 
 
+all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
+                                                 c('2014_ONH1',
+                                                   '2014_ONH2',
+                                                   '2015_ONH1',
+                                                   '2015_ONH2',
+                                                   '2016_ONH1',
+                                                   '2016_ONH2')]
+
+
+library(doParallel)
+
+cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
+
+print(cores)
+cl <- makeForkCluster(cores)
+registerDoParallel(cl)
+
+results_tmin = mclapply(all_experiments[1:2],
+                        function(x)
+                          safe_impute_function(
+                            x,
+                            radius = 60,
+                            meteo_variable_GSOD = 'MIN',
+                            meteo_variable_in_table  = 'TMIN',
+                            daily_weather = daily_weather
+                          ))
+
+results_tmax = mclapply(all_experiments,
+                        function(x)
+                          safe_impute_function(
+                            x,
+                            radius = 60,
+                            meteo_variable_GSOD = 'MAX',
+                            meteo_variable_in_table  = 'TMAX',
+                            daily_weather = daily_weather
+                          ))
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-for (j in unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp)%notin%c('2014_ONH1','2014_ONH2','2015_ONH1','2015_ONH2','2016_ONH1','2016_ONH2')]) {
-  
-  
-  
-  station=vector()
-  
-  
-  find_station=function(x){
-    id_stations=stations_close[x,'id']
-    values_tmax= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMAX',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values_tmin= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values=data.frame(values_tmax,values_tmin)
-    if(nrow(values)==length(yday(date_start):yday(date_end))){
-      return(id_stations)
-    }
-    else{return(NULL)}
-  }
-  
-  find_station2=function(x){
-    id_stations=stations_close[x,'id']
-    values_tmax= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMAX',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values_tmin= ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',id_stations,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$value
-    values=data.frame(values_tmax,values_tmin)
-    if(nrow(values)>length(yday(date_start):yday(date_end))-5){
-      return(id_stations)
-    }
-    else{return(NULL)}
-  }
-  
-  safe_find_function<- function(x) {
-    tryCatch(
-      find_station(x),
-      warning = function(w) NULL,
-      error = function(e) NULL
-    )
-  }
-  
-  safe_find_function2<- function(x) {
-    tryCatch(
-      find_station2(x),
-      warning = function(w) NULL,
-      error = function(e) NULL
-    )
-  }
-  
-  if (length(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function)))!=0){
-    list_stations=unique(unlist(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function))))
-    
-    station=list_stations[1]
-    station_coords=stations_close[stations_close$id==station,c('longitude','latitude')]
-    if (list_stations>1){
-      station2= unique(list_stations[list_stations%notin%station][1])
-      station2_coords=unique(stations_close[stations_close$id==station2,c('longitude','latitude')])
-    }
-    
-  }
-  
-  
-  
-  if (length(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function)))==0){
-    list_stations=unique(unlist(Filter(function(x) !is.null(x), x = lapply(1:nrow(stations_close), safe_find_function2))))
-    
-    station=list_stations[1]
-    station_coords=unique(stations_close[stations_close$id==station,c('longitude','latitude')])
-    if (list_stations>1){
-      station2= list_stations[list_stations%notin%station][1]
-      station2_coords=unique(stations_close[stations_close$id==station2,c('longitude','latitude')])
-      
-    }
-    
-  }
-  
-  #dist=stations_close[stations_close$id==station,'distance']
-  #dist2=stations_close[stations_close$id==station2,'distance']
-  
-  
-  
-  
-  
-  
-  #Downloading the data for the growing season for two nearby stations
-  ncdc_data_station1=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid='TMAX',startdate = date_start,enddate = date_end,limit = 500)$data$value
-  ncdc_data2_station1=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$value
-  ncdc_data_station_dates=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$date
-  ncdc_data_station_lonlat=station_coords
-  values=data.frame( ncdc_data_station1, ncdc_data2_station1,ncdc_data_station_dates)
-  download_data_station1<-data.frame('TMAX'=values$ncdc_data_station1,'TMIN'=values$ncdc_data2_station1,'YDAY'=yday(values$ncdc_data_station_dates),'month'=month(values$ncdc_data_station_dates))
-  
-  ncdc_data_station2=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station2,sep = ''),datatypeid='TMAX',startdate = date_start,enddate = date_end,limit = 500)$data$value
-  ncdc_data2_station2=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station2,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$value
-  ncdc_data_station2_dates=ncdc(datasetid = 'GHCND',stationid = paste('GHCND:',station2,sep = ''),datatypeid='TMIN',startdate = date_start,enddate = date_end,limit = 500)$data$date
-  values2=data.frame( ncdc_data_station2, ncdc_data2_station2,ncdc_data_station2_dates)
-  download_data_station2<-data.frame('TMAX'=values2$ncdc_data_station2,'TMIN'=values2$ncdc_data2_station2,'YDAY'=yday(values2$ncdc_data_station2_dates),'month'=month(values2$ncdc_data_station2_dates))
-  
-  d=cbind(download_data_station1,download_data_station2)
-  
-  
-  
-  
-  d$prec <- rowSums(d[, c(6:17)])
-  
-  dsp <- SpatialPoints(d[,4:3], proj4string=CRS("+proj=longlat +datum=NAD83"))
-  dsp <- SpatialPointsDataFrame(dsp, d)
-  
-  
-  
-  gs<-gstat(formula=prec~1, locations=dta)
-  
-  
-  for (s in 1:nrow(daily_weather[daily_weather$Year_Exp==j,])) {
-    if (daily_weather[daily_weather$Year_Exp==j,'flagged_rain'][s]=='flagged'){
-      day=as.numeric(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'][s])
-      if (length(download_data_station1[download_data_station1$YDAY==day,'prcp'])!=0){
-        daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'sum_rainfall']=download_data_station1[download_data_station1$YDAY==day,'prcp']/10
-        daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'stationID_NOAA']=station
-        daily_weather[daily_weather$Year_Exp==j&daily_weather$Day.of.Year==day,'dist']=round(dist,2)
-      }
-      else{}
-      
-    }
-  }
-  
-  data_plot=as.data.frame(cbind('month'=daily_weather[daily_weather$Year_Exp==j,'month'],'station_NCDC_1'=as.vector(download_data_station1[match(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'],download_data_station1$YDAY),'prcp'])/10,'station_NCDC_2'=as.vector(download_data_station2[match(daily_weather[daily_weather$Year_Exp==j,'Day.of.Year'],download_data_station2$YDAY),'prcp'])/10,'field_station'=daily_weather[daily_weather$Year_Exp==j,'sum_rainfall']))
-  
-  
-  
-  
-  data_plot$month=as.factor(data_plot$month)
-  data_sum <- plyr::ddply(data_plot, "month",
-                          transform, total_station1_NOAA=sum(station_NCDC_1,na.rm = T))
-  data_sum <- plyr::ddply(data_sum, "month",
-                          transform, total_station2_NOAA=sum(station_NCDC_2,na.rm = T))
-  data_sum <- plyr::ddply(data_sum, "month",
-                          transform, total_station_field=sum(field_station))
-  
-  data_sum<-unique(data_sum[,c(1,5:7)])
-  barplot(
-    t(as.matrix(data_sum[, c(2, 3,4)])),
-    beside = T,
-    names.arg = data_sum$month,
-    legend.text = T,
-    ylim = c(0, max(data_sum[, c(2, 3)],na.rm = T) + 50),
-    ylab = "Rainfall (mm)",
-    xlab = "Month",
-    cex.main=0.7,
-    args.legend = list(x = 'topright', bty='n'),
-    main = paste(j , '\n', 'Distance field to NOAA station 1: ', round(dist, 2),'km','\n','Distance field to NOAA station 2: ', round(dist2, 2),'km','\n','Nb flagged values: ',length(which(daily_weather[daily_weather$Year_Exp==j,'flagged_rain']=='flagged')), sep = '')
-  )
-  
-  
-  cc=cc+1
-  
-}
-
-
-
-
+stopCluster(cl)
 
 
 
