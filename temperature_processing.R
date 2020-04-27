@@ -171,15 +171,16 @@ print(cores)
 cl <- makeForkCluster(cores)
 registerDoParallel(cl)
 
-results_tmin = mclapply(all_experiments[1:2],
+results_tmin = mclapply(all_experiments,
                         function(x)
                           safe_impute_function(
                             x,
-                            radius = 60,
+                            radius = 70,
                             meteo_variable_GSOD = 'MIN',
                             meteo_variable_in_table  = 'TMIN',
                             daily_weather = daily_weather
                           ))
+saveRDS(results_tmin,file = 'results_tmin.RDS')
 
 results_tmax = mclapply(all_experiments,
                         function(x)
@@ -192,7 +193,7 @@ results_tmax = mclapply(all_experiments,
                           ))
 
 
-
+saveRDS(results_tmax,file = 'results_tmax.RDS')
 stopCluster(cl)
 
 
