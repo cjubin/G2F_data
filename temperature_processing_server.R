@@ -150,8 +150,8 @@ cc=1
 par(mfrow=c(2,2))
 `%notin%` <- Negate(`%in%`)
 
-source("impute_kriging_withGSOD.R")
-
+source("impute_kriging_withGSOD_server.R")
+source('fahrenheit_to_celsius.R')
 
 
 all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
