@@ -1,21 +1,15 @@
 #' Imputation of a meteorological variable based on a field location with geographical coordinates
 #'
-#' \code{impute_kriging_withGHCND} interpolates values for a specific meteorological variable given a time frame for a specific location
+#' \code{impute_kriging_withGSOD} interpolates values for a specific meteorological variable from ISD stations given a time frame for a specific location
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
 #' @param radius Numeric. Distance from the field location to consider to interpolate.
-#' @param meteo_variable_GSOD Character. GHCND element names: 
-#' 
-#' 
-#' 
-#' 
-#' 
-#' 
-#' 
-#' 
-#' 
+#' @param meteo_variable_GSOD Character. GSOD element names (= variable measured at the ISD STATION): TEMP, MAX, MIN, DEWP, STP, WDSP, PRCP
+#' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested', and optionally meteo_variable_in_table with its value as column name. Ex: 'TMIN'.
+#' @param meteo_variable_in_table. Character with the column name in the table daily_weather of the meteorological variable of interest which has to be imputed from surrounding stations. It does not have to be the same as @meteo_variable_GSOD
 
 
-impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table) {
+
+impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
   library(rnoaa)
   library(raster)
   library(mapdata)
@@ -28,6 +22,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   library(raster)
   library(rgdal)
   source('C:/Users/cathyjubin/Documents/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/fahrenheit_to_celsius.R')
+  
   options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
   
   print(Year_Exp)
@@ -39,7 +34,9 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat']))])
   
   #Values recorded for this variable at the field station
-  field_values=daily_weather[daily_weather$Year_Exp==Year_Exp,meteo_variable_in_table]
+  if (!is.null(meteo_variable_in_table)) {
+    field_values = daily_weather[daily_weather$Year_Exp == Year_Exp, meteo_variable_in_table]
+  }
   
   #Finding the closest stations in a certain radius and select those for which coverage period 2013-2019 is sure
   stations_close=as.data.frame(rnoaa::isd_stations_search(lat =latitude, lon = longitude, radius = radius))
@@ -172,7 +169,8 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   
   pred<-krigeST(values~1,data=timeDF,modelList =fitted.stvgm,newdata = grid.ST )
   predicted.values=pred@data$var1.pred
-  cors=cor(predicted.values,field_values,use = 'complete.obs')
+  if (!is.null(meteo_variable_in_table)) {
+  cors=cor(predicted.values,field_values,use = 'complete.obs')}
   
   
   dates=seq(as.Date(date_start,tz="CET"),as.Date(date_end,tz="CET"),by='days')
@@ -198,17 +196,17 @@ safe_impute_function<- function(y,radius,meteo_variable_GSOD,daily_weather=daily
 
 
 
-all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
-                                                 c('2014_ONH1',
-                                                   '2014_ONH2',
-                                                   '2015_ONH1',
-                                                   '2015_ONH2',
-                                                   '2016_ONH1',
-                                                   '2016_ONH2')]
+#all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
+#                                                 c('2014_ONH1',
+#                                                   '2014_ONH2',
+#                                                   '2015_ONH1',
+#                                                   '2015_ONH2',
+#                                                   '2016_ONH1',
+#                                                   '2016_ONH2')]
 
-require(doParallel)
-workers <- makeCluster(3) 
-registerDoParallel(workers)
-results=mclapply(all_experiments[1:3],
-                 function(x)
-                   safe_impute_function(x,radius=50,meteo_variable_GSOD = 'MIN',meteo_variable_in_table  ='TMIN',daily_weather = daily_weather))
+#require(doParallel)
+#workers <- makeCluster(3) 
+#registerDoParallel(workers)
+#results=mclapply(all_experiments[1:3],
+#                 function(x)
+#                   safe_impute_function(x,radius=50,meteo_variable_GSOD = 'MIN',meteo_variable_in_table  ='TMIN',daily_weather = daily_weather))
