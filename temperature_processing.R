@@ -150,7 +150,7 @@ cc=1
 par(mfrow=c(2,2))
 `%notin%` <- Negate(`%in%`)
 
-source('~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/impute_kriging_withGSOD.R')
+source('impute_kriging_withGSOD.R')
 
 
 
@@ -170,6 +170,17 @@ cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
 print(cores)
 cl <- makeForkCluster(cores)
 registerDoParallel(cl)
+
+results_tmin = lapply(all_experiments,
+                        function(x)
+                          safe_impute_function(
+                            x,
+                            radius = 70,
+                            meteo_variable_GSOD = 'MIN',
+                            meteo_variable_in_table  = 'TMIN',
+                            daily_weather = daily_weather,
+                            only_download==TRUE
+                          ))
 
 results_tmin = mclapply(all_experiments,
                         function(x)
