@@ -9,7 +9,7 @@
 
 
 
-impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
+impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL,only_download=FALSE) {
   library(rnoaa)
   library(raster)
   library(mapdata)
@@ -70,17 +70,24 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   download_station <- function(x) {
     curl::curl_download(
       url = x,
-      destfile = file.path(tempdir(), basename(x)),
+      destfile = file.path(tempdir(),year, basename(x)),
       mode = "wb"
     )
   }
   data=lapply(url_list,function(x)safe_download(x))
-    
+  
+  
+  #Option: only download data and stop there the function.
+  if (only_download==TRUE){
+    break}
+  else{  
     
   #files_stations contains the path (if data for theses ISD stations is available) where to find on the computer the data for the year ans station(s) of interest.
   files_stations <-
     paste0(tempdir(),
            "/",
+           year,
+           '/',
            stations_close$idstation,
            ".csv")
   #List of the csv files in the temporary folder
@@ -120,6 +127,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   d$dates=as.Date(d$dates)
   d=arrange(d,dates)
   print('Data from GSOD stations prepared')
+  
   
   ########################
   ####Ordinary kriging####
@@ -179,16 +187,16 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   return(list(predictions.table,cors))
   
   
-  
+  }
   
   
   
 }
 
 
-safe_impute_function<- function(y,radius,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table) {
+safe_impute_function<- function(y,radius,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table,only_download) {
   tryCatch(
-    impute_kriging_withGSOD(Year_Exp = y,radius=radius,meteo_variable_GSOD = meteo_variable_GSOD,meteo_variable_in_table=meteo_variable_in_table,daily_weather = daily_weather ),
+    impute_kriging_withGSOD(Year_Exp = y,radius=radius,meteo_variable_GSOD = meteo_variable_GSOD,meteo_variable_in_table=meteo_variable_in_table,daily_weather = daily_weather,only_download = only_download ),
     #warning = function(w) NULL,
     error = function(e) NULL
   )
