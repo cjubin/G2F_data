@@ -38,7 +38,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   #files_stations: path to find weather files for the stations used in kriging (radius 80 km) (if data for theses ISD stations is available)
   
   files_stations <-
-    paste0('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/temp_files',
+    paste0('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/GSOD/gsod_files',
            "/",
 	   year,
 	   '/',
@@ -47,7 +47,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   #List of the csv files in the temporary folder
   GSOD_list <-
     list.files(
-      '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/temp_files',
+      '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/GSOD/gsod_files',
       pattern = "*\\.csv$",
       full.names = TRUE,
       recursive = TRUE
@@ -104,7 +104,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   #variogram
   print('Computation variogram starts:')
   var <- variogramST(values~1,data=timeDF,tunit="days",assumeRegular=F,na.omit=T) 
-  pdf(paste(meteo_variable_in_table,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  pdf(paste('GSOD/imputation/',meteo_variable_in_table,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,map=F))
   dev.off()
 
@@ -150,18 +150,6 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   nfolds<-5
   k<-kfold(timeDF,nfolds)
   
-  #nfolds<-nrow(unique(tempminSP@coords))
-  #k<-NA
- 
-  #for (s in 1:nrow(tempminSP@coords)) {
-  #  for (fold in 1:nfolds) {
-  #    if (all(tempminSP@coords[s, ] == unique(tempminSP@coords)[fold, ])) {
-  #     k[s] <- fold
-  #    }
-  #  }
-    
-  #}
-  
   list_models <- list(separable_Vgm,productsum_Vgm,metric_Vgm,summetric_Vgm,simplesummetric_Vgm)
   
   kriging_rmse<-vector(mode = 'list',length = 5)
@@ -203,7 +191,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   
   ##Plot results
   par(mfrow=c(2,1))
-  pdf(paste(meteo_variable_in_table,'/fitted_variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  pdf(paste('GSOD/imputation/',meteo_variable_in_table,'/fitted_variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,fitted.stvgm,map=F))
   dev.off()
 
@@ -233,9 +221,9 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
 
   to_save=list(predictions.table,cors,kriging_cor,kriging_rmse)
   names(to_save)<-c('predictions_YearExp','cors_YearExp','5f.cv.kriging.cor','5f.cv.kriging.rmse')
-  saveRDS(to_save,file=paste(meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
+  saveRDS(to_save,file=paste('GSOD/imputation/',meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
 
-  #return(to_save)
+  return(to_save)
   
   
   
@@ -245,27 +233,6 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
 }
 
 
-safe_impute_function<- function(y,radius,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table) {
-  tryCatch(
-    impute_kriging_withGSOD(Year_Exp = y,radius=radius,meteo_variable_GSOD = meteo_variable_GSOD,meteo_variable_in_table=meteo_variable_in_table,daily_weather = daily_weather ),
-    #warning = function(w) NULL,
-    error = function(e) NULL
-  )
-}
 
 
 
-#all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
-#                                                 c('2014_ONH1',
-#                                                   '2014_ONH2',
-#                                                   '2015_ONH1',
-#                                                   '2015_ONH2',
-#                                                   '2016_ONH1',
-#                                                   '2016_ONH2')]
-
-#require(doParallel)
-#workers <- makeCluster(3) 
-#registerDoParallel(workers)
-#results=mclapply(all_experiments[1:3],
-#                 function(x)
-#                   safe_impute_function(x,radius=50,meteo_variable_GSOD = 'MIN',meteo_variable_in_table  ='TMIN',daily_weather = daily_weather))
