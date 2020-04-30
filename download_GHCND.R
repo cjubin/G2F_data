@@ -2,7 +2,7 @@
 #' Recommend to download locally files (not on server)
 #' \code{impute_kriging_withGSOD} interpolates values for a specific meteorological variable from GHCND stations given a time frame for a specific location
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
-#' @param radius Numeric. Distance from the field location to consider to interpolate.
+#' @param radius Numeric. Distance from the field location to consider to download data.
 #' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, a column 'long', and column 'lat'.
 #' @param meteo_variable_GHCND. Character. Name of the variable used in the GHCND meteorological element to retrieve. List of meteorological elements listed in 'GHCND_documentation.pdf'
 
@@ -31,7 +31,7 @@ download_GHCND <- function(Year_Exp,radius=60,daily_weather=daily_weather,meteo_
   
   download_data=function(station,datatypeid){
     dat=ghcnd_search(stationid = station,var=datatypeid,date_min = as.Date(paste0(year,'-01-01')),date_max  = as.Date(paste0(year,'-12-31')))[[1]]
-    dat=dat[,-which(colnames(dat)%in%c('mflag','cflag','qflag'))]
+    dat=dat[,-which(colnames(dat)%in%c('mflag','cflag','qflag','sflag'))]
     if(length(dat)>0){
       
       dat[,2]=dat[,2]/10
@@ -52,14 +52,14 @@ download_GHCND <- function(Year_Exp,radius=60,daily_weather=daily_weather,meteo_
   
   all_data$longitude=as.numeric(as.vector(all_data$longitude))  
   all_data$latitude=as.numeric(as.vector(all_data$latitude))  
-  all_data$values=as.numeric(as.vector(all_data$values))
+ 
   all_data=arrange(all_data,date)
   
   all_data$Year_Exp=Year_Exp
   all_data$variable=meteo_variable_GHCND
   
   
-  write.table(all_data,file=paste('C:/Users/cathyjubin/Documents/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/GHCND/',year,'/',meteo_variable_GHCND,'_',Year_Exp,'.txt',sep = ''))
+  write.table(all_data,file=paste('C:/Users/cathyjubin/Documents/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/GHCND/',year,'/',meteo_variable_GHCND,'_',Year_Exp,'.txt',sep = ''),col.names = T,row.names = F,sep = '\t',quote = F)
   
   return(all_data)
   

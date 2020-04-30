@@ -2,7 +2,7 @@
 #' Recommend to download locally files (not on server)
 #' \code{impute_kriging_withGSOD} interpolates values for a specific meteorological variable from ISD stations given a time frame for a specific location
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
-#' @param radius Numeric. Distance from the field location to consider to interpolate.
+#' @param radius Numeric. Distance from the field location to consider to download data.
 #' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, a column 'long', and column 'lat'.
 
 
