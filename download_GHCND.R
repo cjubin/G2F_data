@@ -5,9 +5,9 @@
 #' @param radius Numeric. Distance from the field location to consider to download data.
 #' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, a column 'long', and column 'lat'.
 #' @param meteo_variable_GHCND. Character. Name of the variable used in the GHCND meteorological element to retrieve. List of meteorological elements listed in 'GHCND_documentation.pdf'
+#' @param stations download the initial file containing all the GHCND stations
 
-
-download_GHCND <- function(Year_Exp,radius=60,daily_weather=daily_weather,meteo_variable_GHCND) {
+download_GHCND <- function(Year_Exp,radius=60,daily_weather=daily_weather,meteo_variable_GHCND,stations) {
   library(rnoaa)
   library(data.table)
   source('safeguarding.R')
