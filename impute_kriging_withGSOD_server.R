@@ -107,6 +107,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   pdf(paste(meteo_variable_in_table,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,map=F))
   dev.off()
+<<<<<<< HEAD
   
   ######Different models under assessment: we need to fit a model to our variogram.
   ######5 variograms models are possible: separable, product sum, metric, sumMetric, simpleSum metric
@@ -134,6 +135,8 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   #Automatic fit
   summetric_Vgm=fit.StVariogram(var,summetric)
   summetric_mse<-attr(summetric_Vgm, "MSE")
+=======
+>>>>>>> 223a225433ad274c7ee85b52f2f3675c225158fd
   
   #5 Simple sum metric model
   simplesummetric <-vgmST("simpleSumMetric",space = vgm(5,"Sph", 500, 0),time = vgm(500,"Sph", 500, 0), joint = vgm(1,"Sph", 500, 0), nugget=1, stAni=500) 
@@ -204,7 +207,10 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   pdf(paste(meteo_variable_in_table,'/fitted_variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,fitted.stvgm,map=F))
   dev.off()
+<<<<<<< HEAD
   
+=======
+>>>>>>> 223a225433ad274c7ee85b52f2f3675c225158fd
   
   #Prediction grid: growing season for the field experiment described by Year_Exp
   field=vector(mode = 'numeric',length = 2)
@@ -228,9 +234,13 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   dates=seq(as.Date(date_start,tz="CET"),as.Date(date_end,tz="CET"),by='days')
   predictions.table=cbind(Year_Exp,predicted.values,as.character(dates))
   colnames(predictions.table)=c('Year_Exp',paste(meteo_variable_GSOD),'dates')
+<<<<<<< HEAD
   to_save=list(predictions.table,cors,kriging_cor,kriging_rmse)
   names(to_save)<-c('predictions_YearExp','cors_YearExp','5f.cv.kriging.cor','5f.cv.kriging.rmse')
   saveRDS(list(predictions.table,cors,kriging_cor,kriging_rmse),file=paste(meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
+=======
+  saveRDS(list(predictions.table,cors),file=paste(meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
+>>>>>>> 223a225433ad274c7ee85b52f2f3675c225158fd
   #return(list(predictions.table,cors))
   
   
