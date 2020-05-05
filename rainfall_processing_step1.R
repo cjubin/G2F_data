@@ -108,7 +108,9 @@ daily_weather[which(daily_weather$sum_rainfall<0),'flagged_rain']='flagged'
 daily_weather[which(daily_weather$sum_rainfall<0),'sum_rainfall']=NA
 
 daily_weather[is.na(daily_weather$flagged_rain),'flagged_rain']='flagged'
+colnames(daily_weather)[29]<-'PRCP'
 
+write.table(daily_weather,'daily_weather_prcp_processed1.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
 ######IMPUTE RAIN MISSING VALUES #####
 
