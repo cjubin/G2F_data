@@ -13,26 +13,31 @@ download_GHCND <- function(Year_Exp,radius=70,daily_weather=daily_weather,meteo_
   source('safeguarding.R')
   options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
   
+  # ------------------------------------------------------------------------------
   #Retrieve information about the experiment
+  # ------------------------------------------------------------------------------
+  
   year=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'Year'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'Year']))])
   longitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'long'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'long']))])
   latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat']))])
   
+  # ------------------------------------------------------------------------------
+  #Finding the closest stations in a certain radius and select those with the meteorologcail variables of interest
+  # ------------------------------------------------------------------------------
   
-  #Finding the closest stations in a certain radius and select those for which coverage period 2013-2019 is sure
-  #Finding the closest stations in a certain radius and select lines (stations) with TEMP data
   stations_close=as.data.frame(meteo_distance(stations,latitude,longitude,radius = radius))
-  stations_close<-filter(stations_close,element%in%meteo_variable_GHCND)
+  stations_close<-dplyr::filter(stations_close,element%in%meteo_variable_GHCND)
   stations_close<-arrange(stations_close,distance)
   
-  #Download data from stations exhibiting the meteo variable of interest and set data.frame for kriging 
   
-  #Download individual files for the stations of interest (selected before) from the NOAA data center
+  # ------------------------------------------------------------------------------
+  #Download individual files for the stations selected previously from the NOAA data center
+  # ------------------------------------------------------------------------------
   
   download_data=function(station,datatypeid){
     dat=ghcnd_search(stationid = station,var=datatypeid,date_min = as.Date(paste0(year,'-01-01')),date_max  = as.Date(paste0(year,'-12-31')))[[1]]
     dat=dat[,-which(colnames(dat)%in%c('mflag','cflag','qflag','sflag'))]
-    if(length(dat)>0){
+    if(nrow(dat)>0){
       
       dat[,2]=dat[,2]/10
       dat$longitude=unique(stations_close[stations_close$id==station,c('longitude')])
@@ -46,7 +51,10 @@ download_GHCND <- function(Year_Exp,radius=70,daily_weather=daily_weather,meteo_
   
   all_data=lapply(stations_close$id,function(x)safeguarding(download_data(x,datatypeid=meteo_variable_GHCND)))
   
+  # ------------------------------------------------------------------------------
   #Organize summary data.frame with all observations of surrounding stations
+  # ------------------------------------------------------------------------------
+  
   all_data<-plyr::compact(all_data)
   all_data=as.data.frame(do.call('rbind',all_data))
   
