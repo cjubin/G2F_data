@@ -109,7 +109,7 @@ temperatures=arrange(temperatures,Year_Exp,Day.of.Year)
 
 
 
-#Internal consistency test: Tmax(d) > Tmin(d-1) + Tmin(d) < Tmax(d-1)
+#Internal consistency test: Tmax(d) > Tmin(d-1) and Tmin(d) < Tmax(d-1)
 library(data.table)
 nm1 <- c('TMAX','TMIN')
 nm2 <- paste("lag", nm1, sep=".")
