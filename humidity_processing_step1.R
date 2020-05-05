@@ -121,12 +121,6 @@ daily_weather<-merge(daily_weather,allhumidity,by=c('Day.of.Year','Year_Exp'),al
 daily_weather=arrange(daily_weather,Year,Year_Exp,Day.of.Year)
 
 
-# ------------------------------------------------------------------------------
-#Add actual vapor pressure (ea) derived from relative humidity
-# ------------------------------------------------------------------------------
-
-
-
 
 
 
