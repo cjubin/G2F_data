@@ -58,7 +58,7 @@ weather2018$Day.of.Year=difftime(weather2018$Day.of.Year,as.POSIXct(as.Date("01/
 weather2018$Day.of.Year=as.numeric(weather2018$Day.of.Year)
 
 ##Merging the annual weather files based on a subset of columns
-names_col=c("Field.Location" ,"Station.ID","NWS.Network","Month","Day","Year",'Day.of.Year','Time.Local.','Temperature..C.','Dew.Point..C.','Relative.Humidity....',"Solar.Radiation..W.m2.","Rainfall..mm.",'Wind.Speed..m.s.','Wind.Gust..m.s.','Wind.Direction..degree',  "Photoperiod..hours.","Column.Altered" ,"Altered.Column.Names", "Cleaning.Method" ,'Comment')              
+names_col=c("Field.Location" ,"Station.ID","NWS.Network","Month","Day","Year",'Day.of.Year','Time.Local.','Temperature..C.','Dew.Point..C.','Relative.Humidity....',"Solar.Radiation..W.m2.","Rainfall..mm.",'Wind.Speed..m.s.','Wind.Gust..m.s.','Wind.Direction..degrees.' , "Photoperiod..hours.","Column.Altered" ,"Altered.Column.Names", "Cleaning.Method" ,'Comment')              
 weather2014bis=weather2014[,names_col]
 weather2015bis=weather2015[,names_col]
 weather2016bis=weather2016[,names_col]
