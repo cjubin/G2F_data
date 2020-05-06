@@ -9,21 +9,10 @@
 
 
 
-impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL,only_download=FALSE) {
-  library(rnoaa)
-  library(raster)
-  library(mapdata)
-  library(maps)
-  library(maptools)
-  library(sp)
-  library(gstat)
-  library(xts)
-  library(spacetime)
-  library(raster)
-  library(rgdal)
-  source('C:/Users/cathyjubin/Documents/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/fahrenheit_to_celsius.R')
+impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
+  source('fahrenheit_to_celsius.R')
   
-  options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
+  #options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
   
   print(Year_Exp)
   #Retrieve information about the experiment
@@ -46,67 +35,32 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   stations_close$yearend<-substr(stations_close$end,0,nchar(stations_close$end)-4)
   stations_close<-filter(stations_close,yearstart<2013&yearend>2019)
   
-  #Download data from stations exhibiting the meteo variable of interest and set data.frame for kriging 
+  #files_stations: path to find weather files for the stations used in kriging (radius 80 km) (if data for theses ISD stations is available)
   
-  #Download individual files for the stations of interest (selected before) from the ncei noaa server 
-  url_list <-
-    CJ(year, stations_close$idstation, sorted = FALSE)[, paste0(
-      "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/",
-      year,
-      "/",
-      stations_close$idstation,
-      ".csv"
-    )]
-  
-  safe_download <- function(x) {
-    tryCatch(
-      download_station(x),
-      warning = function(w)
-        NULL,
-      error = function(e)
-        NULL
-    )
-  }
-  download_station <- function(x) {
-    curl::curl_download(
-      url = x,
-      destfile = file.path(tempdir(),year, basename(x)),
-      mode = "wb"
-    )
-  }
-  data=lapply(url_list,function(x)safe_download(x))
-  
-  
-  #Option: only download data and stop there the function.
-  if (only_download==TRUE){
-    break}
-  else{  
-    
-  #files_stations contains the path (if data for theses ISD stations is available) where to find on the computer the data for the year ans station(s) of interest.
   files_stations <-
-    paste0(tempdir(),
+    paste0('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/GSOD/gsod_files',
            "/",
-           year,
-           '/',
+	   year,
+	   '/',
            stations_close$idstation,
            ".csv")
   #List of the csv files in the temporary folder
   GSOD_list <-
     list.files(
-      tempdir(),
+      '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/GSOD/gsod_files',
       pattern = "*\\.csv$",
       full.names = TRUE,
       recursive = TRUE
     )
   
-  #Overlap between all initial selected stations and those for which data could be eventually downloaded and are on the computer.
+  #Overlap between all initial selected stations and those for which data could be eventually downloaded on the computer.
   GSOD_list2 <-
     subset(GSOD_list, GSOD_list %in% files_stations)
   
   data_frames=lapply(GSOD_list2,function(x)read.csv(x))
   all_data<-plyr::compact(data_frames)
   all_data=as.data.frame(do.call('rbind',all_data))
-    
+  
   d = cbind(
     'station' = all_data$STATION,
     'longitude' = all_data$LONGITUDE,
@@ -127,7 +81,6 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   d$dates=as.Date(d$dates)
   d=arrange(d,dates)
   print('Data from GSOD stations prepared')
-  
   
   ########################
   ####Ordinary kriging####
@@ -151,16 +104,97 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   #variogram
   print('Computation variogram starts:')
   var <- variogramST(values~1,data=timeDF,tunit="days",assumeRegular=F,na.omit=T) 
+  pdf(paste('GSOD/imputation/',meteo_variable_in_table,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  print(plot(var,map=F))
+  dev.off()
+
   
-  plot(var,map=F)
+  ######Different models under assessment: we need to fit a model to our variogram.
+  ######5 variograms models are possible: separable, product sum, metric, sumMetric, simpleSum metric
   
-  #Sum metric model
-  sumMetric <-vgmST("sumMetric", space = vgm(psill=5,"Sph", range=500, nugget=0),time = vgm(psill=500,"Sph", range=500, nugget=0), joint = vgm(50,"Mat", range=500, nugget=10), stAni=1) 
+  #1 Separable
+  separable <-vgmST("separable", space = vgm(-60,"Sph", 500, 1),time = vgm(35,"Sph", 500, 1), sill=0.56) 
   #Automatic fit
-  fitted.stvgm=fit.StVariogram(var,sumMetric)
-  attr(fitted.stvgm, "MSE")
+  separable_Vgm=fit.StVariogram(var,separable)
+  separable_mse<-attr(separable_Vgm, "MSE")
+  
+  #2 product sum
+  productsum <-vgmST("productSum",space = vgm(1, "Exp", 150, 0.5),time = vgm(1, "Exp", 5, 0.5),k = 50) 
+  #Automatic fit
+  productsum_Vgm=fit.StVariogram(var,productsum)
+  productsum_mse<-attr(productsum, "MSE")
+  
+  #3 metric model
+  metric <-vgmST("metric", joint = vgm(50,"Mat", 500, 0), stAni=200) 
+  #Automatic fit
+  metric_Vgm=fit.StVariogram(var,metric)
+  metric_mse<-attr(metric_Vgm, "MSE")
+  
+  #4 Sum metric model
+  summetric <-vgmST("sumMetric", space = vgm(psill=5,"Sph", range=500, nugget=0),time = vgm(psill=500,"Sph", range=500, nugget=0), joint = vgm(50,"Mat", range=500, nugget=10), stAni=1) 
+  #Automatic fit
+  summetric_Vgm=fit.StVariogram(var,summetric)
+  summetric_mse<-attr(summetric_Vgm, "MSE")
+
+  
+  #5 Simple sum metric model
+  simplesummetric <-vgmST("simpleSumMetric",space = vgm(5,"Sph", 500, 0),time = vgm(500,"Sph", 500, 0), joint = vgm(1,"Sph", 500, 0), nugget=1, stAni=500) 
+  #Automatic fit
+  simplesummetric_Vgm=fit.StVariogram(var,simplesummetric)
+  simplesummetric_mse<-attr(simplesummetric_Vgm, "MSE")
+  
+  
+  
+  ##Cross-validate the method 
+  library(dismo)
+  nfolds<-5
+  k<-kfold(timeDF,nfolds)
+  
+  list_models <- list(separable_Vgm,productsum_Vgm,metric_Vgm,summetric_Vgm,simplesummetric_Vgm)
+  
+  kriging_rmse<-vector(mode = 'list',length = 5)
+  kriging_cor<-vector(mode = 'list',length = 5)
+  
+  
+  for (i in 1:nfolds) {
+    train<- timeDF[k != i, ]
+    test <- timeDF[k == i, ]
+    
+    
+    for (model in 1:length(list_models)) {
+      tryCatch({
+        p1 <-
+          krigeST(
+            values ~ 1,
+            data = train,
+            model = list_models[[model]],
+            newdata = test
+          )
+        predictions_test = p1@data$var1.pred
+        kriging_cor[[model]][i] <- cor(predictions_test, test$values)
+        kriging_rmse[[model]][i] <-
+          sqrt(mean((predictions_test - test$values) ^ 2))
+        
+      }, error = function(e)
+        NULL)
+      
+    }
+  }
+  
+  names(kriging_cor)<-c('separable_Vgm','productsum_Vgm','metric_Vgm','summetric_Vgm','simplesummetric_Vgm')
+  names(kriging_rmse)<-c('separable_Vgm','productsum_Vgm','metric_Vgm','summetric_Vgm','simplesummetric_Vgm')
+  
+  
+  ##Choose the appropriate model based on cross-validation results (minimum average RMSE)
+  fitted.stvgm=get(names(which.min(sapply(kriging_rmse, function(x)mean(x,na.rm=TRUE)))))
+  
+  
+  ##Plot results
   par(mfrow=c(2,1))
-  plot(var,fitted.stvgm,map=F) 
+  pdf(paste('GSOD/imputation/',meteo_variable_in_table,'/fitted_variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  print(plot(var,fitted.stvgm,map=F))
+  dev.off()
+
   
   #Prediction grid: growing season for the field experiment described by Year_Exp
   field=vector(mode = 'numeric',length = 2)
@@ -178,43 +212,27 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily
   pred<-krigeST(values~1,data=timeDF,modelList =fitted.stvgm,newdata = grid.ST )
   predicted.values=pred@data$var1.pred
   if (!is.null(meteo_variable_in_table)) {
-  cors=cor(predicted.values,field_values,use = 'complete.obs')}
+    cors=cor(predicted.values,field_values,use = 'complete.obs')}
   
   
   dates=seq(as.Date(date_start,tz="CET"),as.Date(date_end,tz="CET"),by='days')
   predictions.table=cbind(Year_Exp,predicted.values,as.character(dates))
   colnames(predictions.table)=c('Year_Exp',paste(meteo_variable_GSOD),'dates')
-  return(list(predictions.table,cors))
+
+  to_save=list(predictions.table,cors,kriging_cor,kriging_rmse)
+  names(to_save)<-c('predictions_YearExp','cors_YearExp','5f.cv.kriging.cor','5f.cv.kriging.rmse')
+  saveRDS(to_save,file=paste('GSOD/imputation/',meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
+
+  #return(to_save)
   
   
-  }
+  
   
   
   
 }
 
 
-safe_impute_function<- function(y,radius,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table,only_download) {
-  tryCatch(
-    impute_kriging_withGSOD(Year_Exp = y,radius=radius,meteo_variable_GSOD = meteo_variable_GSOD,meteo_variable_in_table=meteo_variable_in_table,daily_weather = daily_weather,only_download = only_download ),
-    #warning = function(w) NULL,
-    error = function(e) NULL
-  )
-}
 
 
 
-#all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
-#                                                 c('2014_ONH1',
-#                                                   '2014_ONH2',
-#                                                   '2015_ONH1',
-#                                                   '2015_ONH2',
-#                                                   '2016_ONH1',
-#                                                   '2016_ONH2')]
-
-#require(doParallel)
-#workers <- makeCluster(3) 
-#registerDoParallel(workers)
-#results=mclapply(all_experiments[1:3],
-#                 function(x)
-#                   safe_impute_function(x,radius=50,meteo_variable_GSOD = 'MIN',meteo_variable_in_table  ='TMIN',daily_weather = daily_weather))

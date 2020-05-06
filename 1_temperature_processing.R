@@ -11,20 +11,15 @@ library(maptools)
 library(xts)
 library(spacetime)
 library(rgdal)
-source('fahrenheit_to_celsius.R')
 
-
-#library(countyweather)
+`%notin%` <- Negate(`%in%`)
 
 
 library(dplyr)
 #library(plyr)
 library(lubridate)
 
-options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
-#stations <- ghcnd_stations() 
-#stations<-filter(stations,last_year==2020)
-#stations<-filter(stations,first_year<=2013)
+
 
 weather = read.table(
   'weather_semihourly.txt',
@@ -100,13 +95,13 @@ maxT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(TMAX=max(Temperature..C.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,TMAX)
+  dplyr::select(Day.of.Year,Year_Exp,TMAX)
 maxT<-unique(maxT)
 minT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(TMIN=min(Temperature..C.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,TMIN)
+  dplyr::select(Day.of.Year,Year_Exp,TMIN)
 minT<-unique(minT)
 temperatures=merge(maxT,minT,by=c('Day.of.Year','Year_Exp'),all.x=T)
 
@@ -114,7 +109,7 @@ temperatures=arrange(temperatures,Year_Exp,Day.of.Year)
 
 
 
-#Internal consistency test: Tmax(d) > Tmin(d-1) + Tmin(d) < Tmax(d-1)
+#Internal consistency test: Tmax(d) > Tmin(d-1) and Tmin(d) < Tmax(d-1)
 library(data.table)
 nm1 <- c('TMAX','TMIN')
 nm2 <- paste("lag", nm1, sep=".")
@@ -129,22 +124,22 @@ test  <-
   mutate(diff2 = TMIN-lag2)%>%
   filter(diff>0)%>%
   filter(diff2<0)%>%
-  select(Year_Exp,Day.of.Year,TMIN,TMAX)
+  dplyr::select(Year_Exp,Day.of.Year,TMIN,TMAX)
 
 temperatures<-test
 
 
 #Mean temperature: WMO (2010) recommends use of this estimator:'Even though this method is not the best statistical approximation, its consistent use satisfies the comparative purpose of normal'
 
-temperatures$mean_temp=(temperatures$TMAX+temperatures$TMIN)/2
+temperatures$TMEAN=(temperatures$TMAX+temperatures$TMIN)/2
 
 
 
-#Add this daily temp sum to the daily_weather table
+#Add not flagged daily computed TMIN,TMAX, TMEAN to the daily_weather table (based on data from the field station)
 daily_weather<-merge(daily_weather,temperatures,by=c('Day.of.Year','Year_Exp'),all.x = T)
 daily_weather=arrange(daily_weather,Year,Year_Exp,Day.of.Year)
 
 
-
-
+#Write the table which will be used for comparison with interpolated values for non missing values
 write.table(daily_weather,'daily_weather_temp_processed1.txt',col.names=T,row.names=F,sep='\t',quote=F)
+

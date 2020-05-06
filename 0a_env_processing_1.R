@@ -58,7 +58,7 @@ weather2018$Day.of.Year=difftime(weather2018$Day.of.Year,as.POSIXct(as.Date("01/
 weather2018$Day.of.Year=as.numeric(weather2018$Day.of.Year)
 
 ##Merging the annual weather files based on a subset of columns
-names_col=c("Field.Location" ,"Station.ID","NWS.Network","Month","Day","Year",'Day.of.Year','Time.Local.','Temperature..C.','Dew.Point..C.','Relative.Humidity....',"Solar.Radiation..W.m2.","Rainfall..mm.",'Wind.Speed..m.s.','Wind.Gust..m.s.',  "Photoperiod..hours.","Column.Altered" ,"Altered.Column.Names", "Cleaning.Method" ,'Comment')              
+names_col=c("Field.Location" ,"Station.ID","NWS.Network","Month","Day","Year",'Day.of.Year','Time.Local.','Temperature..C.','Dew.Point..C.','Relative.Humidity....',"Solar.Radiation..W.m2.","Rainfall..mm.",'Wind.Speed..m.s.','Wind.Gust..m.s.','Wind.Direction..degrees.' , "Photoperiod..hours.","Column.Altered" ,"Altered.Column.Names", "Cleaning.Method" ,'Comment')              
 weather2014bis=weather2014[,names_col]
 weather2015bis=weather2015[,names_col]
 weather2016bis=weather2016[,names_col]
@@ -212,7 +212,7 @@ soildata=merge(soildata,soil_1,by='Year_Exp',all.x=T)
 #Removing duplicated lines for same Year_Loc
 soildata=soildata[-which(duplicated(soildata[,1])),]
 
-#Create column to indicate that the data were imputed form other years of experiments
+#Create column to indicate that the data were imputed from other years of experiments
 soildata$imputed=NA
 soildata[!is.na(soildata$X..Sand),'imputed']='NO'
 
@@ -255,11 +255,12 @@ soildata[soildata$Year_Exp%in%c('2015_NYH2','2014_NYH2'),'imputed']='close_locat
 setwd("~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1")
 write.table(soildata,'soildata.txt',sep = '\t',quote = F,row.names = F,col.names = T)
 
-soil_imputed=as.data.frame(readxl::read_xlsx('Soil_imputed.xlsx'))
+soil_imputed=as.data.frame(readxl::read_xlsx('soil_imputed.xlsx'))
 soil_imputed$imputed='web_soil_survey'
 soildata$Year_Exp=as.character(as.vector(soildata$Year_Exp))
 soildata$Texture=as.character(as.vector(soildata$Texture))
-soildata[which(is.na(soildata$X..Sand)),c('Year_Exp','X..Sand','X..Silt','X..Clay','OM','Texture','imputed')]=soil_imputed[match(soildata[which(is.na(soildata$X..Sand)),]$Year_Exp,soil_imputed$Year_Exp),c('Year_Exp','X..Sand','X..Silt','X..Clay','OM','Texture','imputed')]
+
+soildata[which(is.na(soildata$X..Sand)),c('Year_Exp','X..Sand','X..Silt','X..Clay','OM','Texture','imputed')]=soil_imputed[match(soildata[which(is.na(soildata$X..Sand)),]$Year_Exp,soil_imputed$Year_Exp),c('Year_Exp','Sand','Silt','Clay','OrganicMatter','Texture','imputed')]
 
 #Final merge of soil data with global weather table
 weather=merge(weather,soildata[,c(1,8:13)],by='Year_Exp',all.x=T)
