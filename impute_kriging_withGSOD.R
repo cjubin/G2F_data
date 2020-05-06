@@ -9,7 +9,7 @@
 
 
 
-impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
+impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL,variable_to_impute,variables_used_to_impute) {
   source('fahrenheit_to_celsius.R')
   
   #options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
@@ -65,17 +65,23 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
     'station' = all_data$STATION,
     'longitude' = all_data$LONGITUDE,
     'latitude' = all_data$LATITUDE,
-    'values' = all_data[, colnames(all_data) %in% meteo_variable_GSOD],
+     all_data[, colnames(all_data) %in% meteo_variable_GSOD],
     'dates' = as.character(as.vector(all_data$DATE))
   )
   d=as.data.frame(d) 
   
   d$longitude=as.numeric(as.vector(d$longitude))  
   d$latitude=as.numeric(as.vector(d$latitude)) 
-  d$values=as.numeric(as.vector(d$values))
   
-  if (meteo_variable_GSOD%in%c('TEMP', 'DEWP', 'MAX', 'MIN')) {
-    d$values <- fahrenheit_to_celsius(d$values)
+  
+  if (all(meteo_variable_GSOD%in%c('TEMP', 'DEWP', 'MAX', 'MIN'))) {
+    d[,eval(meteo_variable_GSOD)] <- fahrenheit_to_celsius(d[,eval(meteo_variable_GSOD)])
+  }
+  
+  if (any(meteo_variable_GSOD%in%c('DEWP'))){
+    d$HMEAN<-NA
+    d[,'HMEAN'] <- round(100 * (exp((17.625 * d[,'DEWP']) / (243.04 + d[,'DEWP'])) /
+                   exp((17.625 * (d[,'TEMP'])) / (243.04 + (d[,'TEMP'])))))
   }
   
   d$dates=as.Date(d$dates)
@@ -85,7 +91,8 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   ########################
   ####Ordinary kriging####
   
-  sub=d
+  sub=d[,which(colnames(d)%in%c('station','longitude','latitude',variable_to_impute,'dates'))]
+  colnames(sub)[which(colnames(sub)==eval(variable_to_impute))]<-'values'
   sp::coordinates(sub)=c('longitude','latitude')
   proj4string(sub) = "+proj=longlat +datum=WGS84"
   #projection(sub)=CRS("+init=epsg:4326")
