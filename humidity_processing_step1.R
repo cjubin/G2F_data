@@ -102,13 +102,13 @@ maxH<-weather%>%
   filter(flagged_humidity%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(HMAX=max(Relative.Humidity....,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,HMAX)
+  dplyr::select(Day.of.Year,Year_Exp,HMAX)
 maxH<-unique(maxH)
 minH<-weather%>%
   filter(flagged_humidity%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(HMIN=min(Relative.Humidity....,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,HMIN)
+  dplyr::select(Day.of.Year,Year_Exp,HMIN)
 minH<-unique(minH)
 allhumidity=merge(maxH,minH,by=c('Day.of.Year','Year_Exp'),all.x=T)
 allhumidity$HMEAN=(allhumidity$HMAX+allhumidity$HMIN)/2

@@ -83,7 +83,7 @@ j<-weather%>%
   filter(flagged_rain%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(sum_rainfall=sum(Rainfall..mm.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,sum_rainfall)
+  dplyr::select(Day.of.Year,Year_Exp,sum_rainfall)
 
 
 #Add this daily rainfall sum to the daily_weather table

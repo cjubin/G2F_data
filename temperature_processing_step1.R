@@ -95,13 +95,13 @@ maxT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(TMAX=max(Temperature..C.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,TMAX)
+  dplyr::select(Day.of.Year,Year_Exp,TMAX)
 maxT<-unique(maxT)
 minT<-weather%>%
   filter(flagged_temp%in%'OK')%>%
   group_by(Day.of.Year,Year_Exp)%>%
   dplyr::mutate(TMIN=min(Temperature..C.,na.rm = T))%>%
-  select(Day.of.Year,Year_Exp,TMIN)
+  dplyr::select(Day.of.Year,Year_Exp,TMIN)
 minT<-unique(minT)
 temperatures=merge(maxT,minT,by=c('Day.of.Year','Year_Exp'),all.x=T)
 
@@ -124,7 +124,7 @@ test  <-
   mutate(diff2 = TMIN-lag2)%>%
   filter(diff>0)%>%
   filter(diff2<0)%>%
-  select(Year_Exp,Day.of.Year,TMIN,TMAX)
+  dplyr::select(Year_Exp,Day.of.Year,TMIN,TMAX)
 
 temperatures<-test
 

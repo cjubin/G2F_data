@@ -53,3 +53,9 @@ daily_weather = read.table(
 source('daylength.R')
 
 daily_weather$daylength=daylength(lat=daily_weather$lat,day_of_year = daily_weather$Day.of.Year)
+
+# ------------------------------------------------------------------------------
+#Write the table 
+# ------------------------------------------------------------------------------
+
+write.table(daily_weather,'daily_weather_daylength_processed1.txt',col.names=T,row.names=F,sep='\t',quote=F)
