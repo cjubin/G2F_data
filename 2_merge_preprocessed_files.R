@@ -78,3 +78,15 @@ multi_full <- Reduce(
   function(x, y, ...) merge(x, y, all = TRUE, ...),
   list1
 )
+dat=multi_full[,-which(colnames(multi_full)%in%c("flagged_rain","flagged_temp","flagged_WIND","flagged_solarrad","incoming_radiation","flagged_humidity"))]
+
+# ------------------------------------------------------------------------------
+# Add saturation vapor pressure (es, kPa) and actual vapor pressure (ea, kPa)
+# saturation vapor pressure deficit es-ea, kPa
+# ------------------------------------------------------------------------------
+source('vapor_pressure.R')
+dat$ea=get.ea(rhmin = dat$HMIN,rhmax = dat$HMAX,tmin=dat$TMIN,tmax=dat$TMAX)
+dat$es=get.es(tmin = dat$TMIN,tmax = dat$TMAX)
+dat$vpd=dat$es-dat$ea
+
+write.table(dat,file='2_merged_dataset.txt',col.names = T,row.names = F,sep = '\t',quote = F)
