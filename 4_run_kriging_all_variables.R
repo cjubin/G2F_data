@@ -61,7 +61,7 @@ results_tmin = mclapply(all_experiments,
                             daily_weather = daily_weather
                           )),mc.cores=cores)
 
-saveRDS(results_tmin,file = 'TMIN/results_tmin.RDS')
+#saveRDS(results_tmin,file = 'TMIN/results_tmin.RDS')
 
 results_tmax = mclapply(all_experiments,
                         function(x)
