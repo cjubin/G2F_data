@@ -1,0 +1,81 @@
+rm(list=ls())
+library(rnoaa)
+library(GSODR)
+library(gstat)
+library(Rcpp)
+library(raster)
+library(sp)
+library(mapdata)
+library(maps)
+library(maptools)
+library(xts)
+library(spacetime)
+library(rgdal)
+source('fahrenheit_to_celsius.R')
+
+
+
+library(dplyr)
+#library(plyr)
+library(lubridate)
+
+
+
+######IMPUTE MISSING VALUES #####
+
+
+
+
+all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
+                                                 c('2014_ONH1',
+                                                   '2014_ONH2',
+                                                   '2015_ONH1',
+                                                   '2015_ONH2',
+                                                   '2016_ONH1',
+                                                   '2016_ONH2')]
+
+
+
+
+cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
+library(doParallel)
+
+
+
+results_tmin = mclapply(all_experiments,
+                        function(x)
+                          safeguarding(
+                            x,
+                            radius = 60,
+                            meteo_variable_GSOD = 'MIN',
+                            meteo_variable_in_table  = 'TMIN',
+                            daily_weather = daily_weather
+                          ),mc.cores=cores)
+
+saveRDS(results_tmin,file = 'TMIN/results_tmin.RDS')
+
+results_tmax = mclapply(all_experiments,
+                        function(x)
+                          safe_impute_function(
+                            x,
+                            radius = 60,
+                            meteo_variable_GSOD = 'MAX',
+                            meteo_variable_in_table  = 'TMAX',
+                            daily_weather = daily_weather
+                          ),mc.cores=cores)
+
+
+saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
+#stopCluster(cl)
+
+
+
+
+
+
+
+
+
+
+
+
