@@ -74,9 +74,20 @@ results_tmax = mclapply(all_experiments,
                           )),mc.cores=cores)
 
 
-saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
+#saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
+
+results_tmax = mclapply(all_experiments,
+                        function(x)
+                          safeguarding(impute_kriging_withGSOD(
+                            x,
+                            radius = 70,
+                            meteo_variable_GSOD = 'MAX',
+                            meteo_variable_in_table  = 'TMAX',
+                            daily_weather = daily_weather
+                          )),mc.cores=cores)
 
 
+#saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
 
 
 
