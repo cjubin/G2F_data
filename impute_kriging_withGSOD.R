@@ -9,7 +9,7 @@
 
 
 
-impute_kriging_withGSOD <- function(Year_Exp,radius=50,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
+impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
   source('fahrenheit_to_celsius.R')
   
   #options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
