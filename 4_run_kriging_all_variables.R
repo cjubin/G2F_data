@@ -13,6 +13,7 @@ library(spacetime)
 library(rgdal)
 source('fahrenheit_to_celsius.R')
 
+`%notin%` <- Negate(`%in%`)
 
 
 library(dplyr)
@@ -49,7 +50,7 @@ all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %n
 
 cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
 library(doParallel)
-
+source('impute_kriging_withGSOD.R')
 
 results_tmin = mclapply(all_experiments,
                         function(x)
@@ -58,6 +59,7 @@ results_tmin = mclapply(all_experiments,
                             radius = 70,
                             meteo_variable_GSOD = 'MIN',
                             meteo_variable_in_table  = 'TMIN',
+                            variable_to_impute = 'MIN',
                             daily_weather = daily_weather
                           )),mc.cores=cores)
 
@@ -70,25 +72,49 @@ results_tmax = mclapply(all_experiments,
                             radius = 70,
                             meteo_variable_GSOD = 'MAX',
                             meteo_variable_in_table  = 'TMAX',
+                            variable_to_impute = 'MAX',
                             daily_weather = daily_weather
                           )),mc.cores=cores)
 
 
 #saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
 
-results_tmax = mclapply(all_experiments,
+results_prcp = mclapply(all_experiments,
                         function(x)
                           safeguarding(impute_kriging_withGSOD(
                             x,
                             radius = 70,
-                            meteo_variable_GSOD = 'MAX',
-                            meteo_variable_in_table  = 'TMAX',
+                            meteo_variable_GSOD = 'PRCP',
+                            meteo_variable_in_table  = 'PRCP',
+                            variable_to_impute = 'PRCP',
+                            daily_weather = daily_weather
+                          )),mc.cores=cores)
+
+
+results_HMEAN = mclapply(all_experiments,
+                        function(x)
+                          safeguarding(impute_kriging_withGSOD(
+                            x,
+                            radius = 70,
+                            meteo_variable_GSOD = c('DEWP','TEMP'),
+                            meteo_variable_in_table  = 'HMEAN',
+                            variable_to_impute = 'HMEAN',
                             daily_weather = daily_weather
                           )),mc.cores=cores)
 
 
 #saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
 
+results_wind = mclapply(all_experiments,
+                        function(x)
+                          safeguarding(impute_kriging_withGSOD(
+                            x,
+                            radius = 70,
+                            meteo_variable_GSOD = 'WDSP',
+                            meteo_variable_in_table  = 'MEANWINDSPEED',
+                            variable_to_impute = 'WDSP',
+                            daily_weather = daily_weather
+                          )),mc.cores=cores)
 
 
 
