@@ -24,6 +24,16 @@ library(lubridate)
 ######IMPUTE MISSING VALUES #####
 
 
+daily_weather=read.table(
+  '2_merged_dataset.txt',
+  header = T,
+  sep = '\t',
+  na.strings = c(NA, ''),
+  quote = '',
+  comment.char = "#",
+  stringsAsFactors = F
+)
+
 
 
 all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %notin%
@@ -41,32 +51,31 @@ cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
 library(doParallel)
 
 
-
 results_tmin = mclapply(all_experiments,
                         function(x)
-                          safeguarding(
+                          safeguarding(impute_kriging_withGSOD(
                             x,
-                            radius = 60,
+                            radius = 70,
                             meteo_variable_GSOD = 'MIN',
                             meteo_variable_in_table  = 'TMIN',
                             daily_weather = daily_weather
-                          ),mc.cores=cores)
+                          )),mc.cores=cores)
 
 saveRDS(results_tmin,file = 'TMIN/results_tmin.RDS')
 
 results_tmax = mclapply(all_experiments,
                         function(x)
-                          safe_impute_function(
+                          safeguarding(impute_kriging_withGSOD(
                             x,
-                            radius = 60,
+                            radius = 70,
                             meteo_variable_GSOD = 'MAX',
                             meteo_variable_in_table  = 'TMAX',
                             daily_weather = daily_weather
-                          ),mc.cores=cores)
+                          )),mc.cores=cores)
 
 
 saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
-#stopCluster(cl)
+
 
 
 
