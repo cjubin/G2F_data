@@ -5,6 +5,12 @@ get.ea <- function(rhmin, rhmax, tmin, tmax){
   return(ea)
 }
 
+get.ea.no.RH <- function(tmin){
+  esmn <- get.esmn(tmin) # other fun same as James suggested
+  ea <- esmn
+  return(ea)
+}
+
 get.esmn <- function(tmin){
   esmn <- .6108 * exp((17.27 * tmin) / (tmin + 237.3))
   return(esmn)
