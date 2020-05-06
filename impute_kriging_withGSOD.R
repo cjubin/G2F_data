@@ -223,7 +223,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   names(to_save)<-c('predictions_YearExp','cors_YearExp','5f.cv.kriging.cor','5f.cv.kriging.rmse')
   saveRDS(to_save,file=paste('GSOD/imputation/',meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
 
-  return(to_save)
+  #return(to_save)
   
   
   
