@@ -30,6 +30,7 @@ stations<-filter(stations,first_year<=2013)
 ####IMPUTE ALL DATASETS USED AFTER FOR ORDINARY KRIGING#######
 source('download_GSOD.R')
 source('download_GHCND.R')
+source('download_solar.R')
 ##Data files are downloaded from 2 types, since some variables are available in a type of dataset and not in the other (e.g. average relative humidity)
 
 ##Data.frame containing names of experiments together with geographical coordinates
@@ -59,7 +60,12 @@ lapply(all_experiments,
            radius = 70,
            daily_weather = daily_weather
          )))
-
+lapply(all_experiments,
+       function(x)
+         safeguarding(download_solar(
+           x,
+           daily_weather = daily_weather
+         )))
 lapply(all_experiments,
        function(x)
          safeguarding(download_GHCND(
@@ -88,6 +94,16 @@ lapply(all_experiments,
            daily_weather = daily_weather,
            stations=stations,
            meteo_variable_GHCND='PRCP'
+         )))
+
+lapply(all_experiments,
+       function(x)
+         safeguarding(download_GHCND(
+           x,
+           radius = 70,
+           daily_weather = daily_weather,
+           stations=stations,
+           meteo_variable_GHCND='PSUN'
          )))
 
 lapply(all_experiments,
