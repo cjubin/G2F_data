@@ -79,46 +79,6 @@ results_tmax = mclapply(all_experiments,
 
 #saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
 
-results_prcp = mclapply(all_experiments,
-                        function(x)
-                          safeguarding(impute_kriging_withGSOD(
-                            x,
-                            radius = 70,
-                            meteo_variable_GSOD = 'PRCP',
-                            meteo_variable_in_table  = 'PRCP',
-                            variable_to_impute = 'PRCP',
-                            daily_weather = daily_weather
-                          )),mc.cores=cores)
-
-
-results_HMEAN = mclapply(all_experiments,
-                        function(x)
-                          safeguarding(impute_kriging_withGSOD(
-                            x,
-                            radius = 70,
-                            meteo_variable_GSOD = c('DEWP','TEMP'),
-                            meteo_variable_in_table  = 'HMEAN',
-                            variable_to_impute = 'HMEAN',
-                            daily_weather = daily_weather
-                          )),mc.cores=cores)
-
-
-#saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
-
-results_wind = mclapply(all_experiments,
-                        function(x)
-                          safeguarding(impute_kriging_withGSOD(
-                            x,
-                            radius = 70,
-                            meteo_variable_GSOD = 'WDSP',
-                            meteo_variable_in_table  = 'MEANWINDSPEED',
-                            variable_to_impute = 'WDSP',
-                            daily_weather = daily_weather
-                          )),mc.cores=cores)
-
-
-
-
 
 
 
