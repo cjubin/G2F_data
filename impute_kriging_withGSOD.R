@@ -80,7 +80,9 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   }
   
   if (any(meteo_variable_GSOD%in%c('TEMP', 'DEWP', 'MAX', 'MIN'))) {
-    d[,eval(meteo_variable_GSOD)] <- fahrenheit_to_celsius(d[,eval(meteo_variable_GSOD)])
+    if (length(meteo_variable_GSOD)>1){ d[,eval(meteo_variable_GSOD)] <- fahrenheit_to_celsius(d[,eval(meteo_variable_GSOD)])}
+    if (length(meteo_variable_GSOD)==1){ d[,eval(meteo_variable_GSOD)] <- fahrenheit_to_celsius(as.numeric(as.vector(d[,eval(meteo_variable_GSOD)])))}
+    
   }
   
   if (any(meteo_variable_GSOD%in%c('DEWP'))){
@@ -191,14 +193,21 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   k<-kfold(timeDF,nfolds)
   
   list_models <- list()
-  if (exists(paste(quote(separable_Vgm)))){list_models<-append(list_models,separable_Vgm)}
-  if (exists(paste(quote(productsum_Vgm)))){list_models<-append(list_models,productsum_Vgm)}
-  if (exists(paste(quote(metric_Vgm)))){list_models<-append(list_models,metric_Vgm)}
-  if (exists(paste(quote(summetric_Vgm)))){list_models<-append(list_models,summetric_Vgm)}
-  if (exists(paste(quote(simplesummetric_Vgm)))){list_models<-append(list_models,simplesummetric_Vgm)}
+  if (exists(paste(quote(separable_Vgm)))){list_models<-append(list_models,list(separable_Vgm))
+  names(list_models)[[length(list_models)]]<-'separable_Vgm'}
+  if (exists(paste(quote(productsum_Vgm)))){list_models<-append(list_models,list(productsum_Vgm))
+  names(list_models)[[length(list_models)]]<-'productsum_Vgm'}
+  if (exists(paste(quote(metric_Vgm)))){list_models<-append(list_models,list(metric_Vgm))
+  names(list_models)[[length(list_models)]]<-'metric_Vgm'}
+  if (exists(paste(quote(summetric_Vgm)))){list_models<-append(list_models,list(summetric_Vgm))
+  names(list_models)[[length(list_models)]]<-'summetric_Vgm'}
+  if (exists(paste(quote(simplesummetric_Vgm)))){list_models<-append(list_models,list(simplesummetric_Vgm))
+  names(list_models)[[length(list_models)]]<-'simplesummetric_Vgm'}
   
-  kriging_rmse<-vector(mode = 'list',length = 3)
-  kriging_cor<-vector(mode = 'list',length = 3)
+  kriging_rmse<-vector(mode = 'list',length = length(list_models))
+  kriging_cor<-vector(mode = 'list',length = length(list_models))
+  names(kriging_cor)<-names(list_models)
+  names(kriging_rmse)<-names(list_models)
   
   
   for (i in 1:nfolds) {
@@ -226,8 +235,6 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
     }
   }
   
-  names(kriging_cor)<-c('productsum_Vgm','metric_Vgm','summetric_Vgm','simplesummetric_Vgm')
-  names(kriging_rmse)<-c('productsum_Vgm','metric_Vgm','summetric_Vgm','simplesummetric_Vgm')
   
   
   ##Choose the appropriate model based on cross-validation results (minimum average RMSE)
