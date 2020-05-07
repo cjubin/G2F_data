@@ -47,7 +47,6 @@ all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %n
 
 
 
-
 cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
 library(doParallel)
 source('impute_kriging_withGSOD.R')
