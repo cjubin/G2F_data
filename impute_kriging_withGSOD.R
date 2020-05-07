@@ -123,7 +123,7 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   #variogram
   print('Computation variogram starts:')
   var <- variogramST(values~1,data=timeDF,tunit="days",assumeRegular=F,na.omit=T) 
-  pdf(paste('GSOD/imputation/',meteo_variable_in_table,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  pdf(paste('GSOD/imputation/',variable_to_impute,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,map=F))
   dev.off()
 
