@@ -70,6 +70,8 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   )
   d=as.data.frame(d) 
   
+  if (length(meteo_variable_GSOD)==1){colnames(d)[4]=meteo_variable_GSOD}
+  
   d$longitude=as.numeric(as.vector(d$longitude))  
   d$latitude=as.numeric(as.vector(d$latitude)) 
   
