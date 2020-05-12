@@ -4,12 +4,12 @@
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
 #' @param radius Numeric. Distance from the field location to consider to interpolate.
 #' @param meteo_variable_GSOD Character. GSOD element names (= variable measured at the ISD STATION): TEMP, MAX, MIN, DEWP, STP, WDSP, PRCP
-#' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested', and optionally meteo_variable_in_table with its value as column name. Ex: 'TMIN'.
-#' @param meteo_variable_in_table. Character with the column name in the table daily_weather of the meteorological variable of interest which has to be imputed from surrounding stations. It does not have to be the same as @meteo_variable_GSOD
+#' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested' and @variable_to_impute
+#' @param variable_to_impute. Character.
+#' @param name_in_table. Character
 
 
-
-impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily_weather=daily_weather,meteo_variable_in_table=NULL,variable_to_impute) {
+impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily_weather=daily_weather,variable_to_impute,name_in_table) {
   source('fahrenheit_to_celsius.R')
   
   #options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
@@ -23,8 +23,8 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat']))])
   
   #Values recorded for this variable at the field station
-  if (!is.null(variable_to_impute)) {
-    field_values = daily_weather[daily_weather$Year_Exp == Year_Exp, variable_to_impute]
+  if (!is.null(name_in_table)&name_in_table%in%colnames(daily_weather)) {
+    field_values = daily_weather[daily_weather$Year_Exp == Year_Exp, name_in_table]
   }
   
   #Finding the closest stations in a certain radius and select those for which coverage period 2013-2019 is sure
@@ -76,7 +76,9 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   d$latitude=as.numeric(as.vector(d$latitude)) 
   
   if (any(meteo_variable_GSOD%in%c('DEWP'))) {
-    d<-d[-which(d$DEWP>999),]
+    index=which(d$DEWP>999)
+    if(length(index)>0){d<-d[-index,]}
+    
   }
   
   if (any(meteo_variable_GSOD%in%c('TEMP', 'DEWP', 'MAX', 'MIN'))) {
@@ -91,6 +93,10 @@ impute_kriging_withGSOD <- function(Year_Exp,radius=70,meteo_variable_GSOD,daily
   }
   
   d$dates=as.Date(d$dates)
+  
+  for (i in colnames(d)[colnames(d)%notin%c('station','dates','latitude','longitude')]) {
+    d[,i]<-as.numeric(as.vector(d[,i]))
+  }
   
   print('Data from GSOD stations prepared')
   

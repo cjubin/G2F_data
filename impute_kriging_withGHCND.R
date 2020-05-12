@@ -4,12 +4,12 @@
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
 #' @param radius Numeric. Distance from the field location to consider to interpolate.
 #' @param meteo_variable_GHCND Character. GHCND element names (= variable measured at the GHCND station): TMAX, TMIN, PRCP
-#' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested', and optionally meteo_variable_in_table with its value as column name. Ex: 'TMIN'.
-#' @param meteo_variable_in_table. Character with the column name in the table daily_weather of the meteorological variable of interest which has to be imputed from surrounding stations. It does not have to be the same as @meteo_variable_GHCND
+#' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested' and @variable_to_impute
+#' @param variable_to_impute. Character.
+#' @param name_in_table. Character
 
 
-
-impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,daily_weather=daily_weather,meteo_variable_in_table=NULL) {
+impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,daily_weather=daily_weather,variable_to_impute,name_in_table) {
   source('fahrenheit_to_celsius.R')
   
   #options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
@@ -23,25 +23,26 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   latitude=as.numeric(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat'])[!is.na(unique(daily_weather[daily_weather$Year_Exp==Year_Exp,'lat']))])
   
   #Values recorded for this variable at the field station
-  if (!is.null(meteo_variable_in_table)) {
-    field_values = daily_weather[daily_weather$Year_Exp == Year_Exp, meteo_variable_in_table]
+  if (!is.null(name_in_table)&name_in_table%in%colnames(daily_weather)) {
+    field_values = daily_weather[daily_weather$Year_Exp == Year_Exp, name_in_table]
   }
   
-  #Download data alreafdy formatted for GHCND files
+  d=read.table(file=paste('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/GHCND/ghcnd_files/',year,'/',variable_to_impute,'_',Year_Exp,'.txt',sep = ''),header=T)
   
-  d=read.table(file=paste('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/GHCND/ghcnd_files/',meteo_variable_GHCND,'_',Year_Exp,'.txt',sep = ''))
-  colnames(d)[2]='values'
   colnames(d)[3]='dates'
-  d=d[,which(colnames(d)%in%c('Year_Exp','variable'))]
+  ind=which(colnames(d)%in%c('Year_Exp','variable'))
+  d=d[,-ind]
   
-  d$date=as.Date(d$date)
+  d$date=as.Date(as.character(d$date))
   d=arrange(d,dates)
   print('Data from GHCND stations prepared')
+  
   
   ########################
   ####Ordinary kriging####
   
-  sub=d
+  sub=d[,which(colnames(d)%in%c('station','longitude','latitude',meteo_variable_GHCND,'dates'))]
+  
   sp::coordinates(sub)=c('longitude','latitude')
   proj4string(sub) = "+proj=longlat +datum=WGS84"
   #projection(sub)=CRS("+init=epsg:4326")
@@ -51,7 +52,15 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   
   
   tempminSP <- SpatialPoints(tempmin.UTM@coords,CRS("+init=epsg:3395"))
-  tempminDF <- data.frame(values=tempmin.UTM$values) 
+  
+  ######
+  
+  #tempminDF <- data.frame(values=tempmin.UTM$HMEAN )
+  tempminDF <- data.frame(d[,meteo_variable_GHCND])
+  colnames(tempminDF)<-'values'
+  ####
+  
+  
   tempminTM <- as.POSIXct(date(tempmin.UTM$dates))
   #combine the 3 objects
   timeDF <- STIDF(tempminSP,tempminTM,data=tempminDF) 
@@ -60,7 +69,7 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   #variogram
   print('Computation variogram starts:')
   var <- variogramST(values~1,data=timeDF,tunit="days",assumeRegular=F,na.omit=T) 
-  pdf(paste('GHCND/imputation/',meteo_variable_in_table,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  pdf(paste('GHCND/imputation/',variable_to_impute,'/variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,map=F))
   dev.off()
   
@@ -68,36 +77,57 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   ######Different models under assessment: we need to fit a model to our variogram.
   ######5 variograms models are possible: separable, product sum, metric, sumMetric, simpleSum metric
   
-  #1 Separable
-  separable <-vgmST("separable", space = vgm(-60,"Sph", 500, 1),time = vgm(35,"Sph", 500, 1), sill=0.56) 
+  #0 Separable metric model
+  separable <- vgmST("separable", space = vgm(-60,"Sph", 500, 1),time = vgm(35,"Sph", 500, 1), sill=0.56) 
   #Automatic fit
-  separable_Vgm=fit.StVariogram(var,separable)
-  separable_mse<-attr(separable_Vgm, "MSE")
+  tryCatch({
+    separable_Vgm=fit.StVariogram(var,separable)
+    separable_mse<-attr(separable_Vgm, "MSE")}
+    , error = function(e)
+      NULL
+  ) 
   
-  #2 product sum
+  #1 product sum
   productsum <-vgmST("productSum",space = vgm(1, "Exp", 150, 0.5),time = vgm(1, "Exp", 5, 0.5),k = 50) 
   #Automatic fit
-  productsum_Vgm=fit.StVariogram(var,productsum)
-  productsum_mse<-attr(productsum, "MSE")
+  tryCatch({
+    productsum_Vgm=fit.StVariogram(var,productsum)
+    productsum_mse<-attr(productsum, "MSE")}
+    , error = function(e)
+      NULL
+  )
   
-  #3 metric model
+  
+  #2 metric model
   metric <-vgmST("metric", joint = vgm(50,"Mat", 500, 0), stAni=200) 
   #Automatic fit
-  metric_Vgm=fit.StVariogram(var,metric)
-  metric_mse<-attr(metric_Vgm, "MSE")
+  tryCatch({
+    metric_Vgm=fit.StVariogram(var,metric)
+    metric_mse<-attr(metric_Vgm, "MSE")}
+    , error = function(e)
+      NULL
+  )
   
-  #4 Sum metric model
+  #3 Sum metric model
   summetric <-vgmST("sumMetric", space = vgm(psill=5,"Sph", range=500, nugget=0),time = vgm(psill=500,"Sph", range=500, nugget=0), joint = vgm(50,"Mat", range=500, nugget=10), stAni=1) 
   #Automatic fit
-  summetric_Vgm=fit.StVariogram(var,summetric)
-  summetric_mse<-attr(summetric_Vgm, "MSE")
+  tryCatch({
+    summetric_Vgm=fit.StVariogram(var,summetric)
+    summetric_mse<-attr(summetric_Vgm, "MSE")}
+    , error = function(e)
+      NULL
+  )
   
   
-  #5 Simple sum metric model
+  #4 Simple sum metric model
   simplesummetric <-vgmST("simpleSumMetric",space = vgm(5,"Sph", 500, 0),time = vgm(500,"Sph", 500, 0), joint = vgm(1,"Sph", 500, 0), nugget=1, stAni=500) 
   #Automatic fit
-  simplesummetric_Vgm=fit.StVariogram(var,simplesummetric)
-  simplesummetric_mse<-attr(simplesummetric_Vgm, "MSE")
+  tryCatch({
+    simplesummetric_Vgm=fit.StVariogram(var,simplesummetric)
+    simplesummetric_mse<-attr(simplesummetric_Vgm, "MSE")}
+    , error = function(e)
+      NULL
+  )
   
   
   
@@ -106,16 +136,28 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   nfolds<-5
   k<-kfold(timeDF,nfolds)
   
-  list_models <- list(separable_Vgm,productsum_Vgm,metric_Vgm,summetric_Vgm,simplesummetric_Vgm)
+  list_models <- list()
+  if (exists(paste(quote(separable_Vgm)))){list_models<-append(list_models,list(separable_Vgm))
+  names(list_models)[[length(list_models)]]<-'separable_Vgm'}
+  if (exists(paste(quote(productsum_Vgm)))){list_models<-append(list_models,list(productsum_Vgm))
+  names(list_models)[[length(list_models)]]<-'productsum_Vgm'}
+  if (exists(paste(quote(metric_Vgm)))){list_models<-append(list_models,list(metric_Vgm))
+  names(list_models)[[length(list_models)]]<-'metric_Vgm'}
+  if (exists(paste(quote(summetric_Vgm)))){list_models<-append(list_models,list(summetric_Vgm))
+  names(list_models)[[length(list_models)]]<-'summetric_Vgm'}
+  if (exists(paste(quote(simplesummetric_Vgm)))){list_models<-append(list_models,list(simplesummetric_Vgm))
+  names(list_models)[[length(list_models)]]<-'simplesummetric_Vgm'}
   
-  kriging_rmse<-vector(mode = 'list',length = 5)
-  kriging_cor<-vector(mode = 'list',length = 5)
+  kriging_rmse<-vector(mode = 'list',length = length(list_models))
+  kriging_cor<-vector(mode = 'list',length = length(list_models))
+  names(kriging_cor)<-names(list_models)
+  names(kriging_rmse)<-names(list_models)
   
   
   for (i in 1:nfolds) {
     train<- timeDF[k != i, ]
     test <- timeDF[k == i, ]
-    
+    values=test@data$values
     
     for (model in 1:length(list_models)) {
       tryCatch({
@@ -127,9 +169,9 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
             newdata = test
           )
         predictions_test = p1@data$var1.pred
-        kriging_cor[[model]][i] <- cor(predictions_test, test$values)
+        kriging_cor[[model]][i] <- cor(predictions_test, values)
         kriging_rmse[[model]][i] <-
-          sqrt(mean((predictions_test - test$values) ^ 2))
+          sqrt(mean((predictions_test - values) ^ 2))
         
       }, error = function(e)
         NULL)
@@ -137,8 +179,6 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
     }
   }
   
-  names(kriging_cor)<-c('separable_Vgm','productsum_Vgm','metric_Vgm','summetric_Vgm','simplesummetric_Vgm')
-  names(kriging_rmse)<-c('separable_Vgm','productsum_Vgm','metric_Vgm','summetric_Vgm','simplesummetric_Vgm')
   
   
   ##Choose the appropriate model based on cross-validation results (minimum average RMSE)
@@ -147,7 +187,7 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   
   ##Plot results
   par(mfrow=c(2,1))
-  pdf(paste('GHCND/imputation/',meteo_variable_in_table,'/fitted_variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
+  pdf(paste('GHCND/imputation/',variable_to_impute,'/fitted_variogram',Year_Exp,'.pdf',sep='') ,width = 8,height = 8)
   print(plot(var,fitted.stvgm,map=F))
   dev.off()
   
@@ -162,24 +202,25 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   proj4string(field) = "+proj=longlat +datum=WGS84"
   field_grid<- spTransform(field,CRS("+init=epsg:3395")) 
   tm.grid<-seq(as.POSIXct(date_start,tz="CET"),as.POSIXct(date_end,tz="CET"),by='days')
+  
   grid.ST <- STF(field_grid,tm.grid) 
   
   
   pred<-krigeST(values~1,data=timeDF,modelList =fitted.stvgm,newdata = grid.ST )
   predicted.values=pred@data$var1.pred
-  if (!is.null(meteo_variable_in_table)) {
+  if (!is.null(variable_to_impute)) {
     cors=cor(predicted.values,field_values,use = 'complete.obs')}
   
   
   dates=seq(as.Date(date_start,tz="CET"),as.Date(date_end,tz="CET"),by='days')
   predictions.table=cbind(Year_Exp,predicted.values,as.character(dates))
-  colnames(predictions.table)=c('Year_Exp',paste(meteo_variable_GHCND),'dates')
+  colnames(predictions.table)=c('Year_Exp',paste(variable_to_impute),'dates')
   
   to_save=list(predictions.table,cors,kriging_cor,kriging_rmse)
   names(to_save)<-c('predictions_YearExp','cors_YearExp','5f.cv.kriging.cor','5f.cv.kriging.rmse')
-  saveRDS(to_save,file=paste('GHCND/imputation/',meteo_variable_in_table,'/',Year_Exp,'.RDS',sep=''))
+  saveRDS(to_save,file=paste('GHCND/imputation/',variable_to_impute,'/',Year_Exp,'.RDS',sep=''))
   
-  return(to_save)
+  #return(to_save)
   
   
   
