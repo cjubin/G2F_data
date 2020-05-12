@@ -49,23 +49,16 @@ all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %n
 
 cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
 library(doParallel)
-source('impute_kriging_withGHCND.R')
+source('impute_kriging_withGSOD.R')
 source('safeguarding.R')
 
-
-results_prcp = mclapply(all_experiments,
-                        function(x)
-                          safeguarding(impute_kriging_withGHCND(
-                            x,
-                            radius = 70,
-                            meteo_variable_GHCND = 'prcp',
-                            variable_to_impute = 'PRCP',
-                            name_in_table='PRCP',
-                            daily_weather = daily_weather
-                          )),mc.cores=cores)
-
-
-
-
-
-
+results_HMEAN = mclapply(all_experiments,
+                         function(x)
+                           safeguarding(impute_kriging_withGSOD(
+                             x,
+                             radius = 70,
+                             meteo_variable_GSOD = c('DEWP','TEMP'),
+                             variable_to_impute = 'HMEAN',
+                             name_in_table='HMEAN',
+                             daily_weather = daily_weather
+                           )),mc.cores=cores)
