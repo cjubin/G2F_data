@@ -52,32 +52,20 @@ library(doParallel)
 source('impute_kriging_withGSOD.R')
 source('safeguarding.R')
 
+
+
+
 results_tmin = mclapply(all_experiments,
                         function(x)
                           safeguarding(impute_kriging_withGSOD(
                             x,
                             radius = 70,
                             meteo_variable_GSOD = 'MIN',
-                            meteo_variable_in_table  = 'TMIN',
                             variable_to_impute = 'MIN',
+                            name_in_table='TMIN',
                             daily_weather = daily_weather
                           )),mc.cores=cores)
 
-#saveRDS(results_tmin,file = 'TMIN/results_tmin.RDS')
-
-results_tmax = mclapply(all_experiments,
-                        function(x)
-                          safeguarding(impute_kriging_withGSOD(
-                            x,
-                            radius = 70,
-                            meteo_variable_GSOD = 'MAX',
-                            meteo_variable_in_table  = 'TMAX',
-                            variable_to_impute = 'MAX',
-                            daily_weather = daily_weather
-                          )),mc.cores=cores)
-
-
-#saveRDS(results_tmax,file = 'TMAX/results_tmax.RDS')
 
 
 
