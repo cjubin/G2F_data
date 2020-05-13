@@ -35,7 +35,7 @@ source('download_solar.R')
 
 ##Data.frame containing names of experiments together with geographical coordinates
 daily_weather=read.table(
-  'daily_weather_temp_processed1.txt',
+  '2_merged_dataset.txt',
   header = T,
   sep = '\t',
   na.strings = c(NA,''),
@@ -51,30 +51,7 @@ all_experiments=unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) %n
                                                    '2015_ONH2',
                                                    '2016_ONH1',
                                                    '2016_ONH2')]
-
-
-lapply(all_experiments,
-       function(x)
-         safeguarding(download_GSOD(
-           x,
-           radius = 70,
-           daily_weather = daily_weather
-         )))
-lapply(all_experiments,
-       function(x)
-         safeguarding(download_solar(
-           x,
-           daily_weather = daily_weather
-         )))
-lapply(all_experiments,
-       function(x)
-         safeguarding(download_GHCND(
-           x,
-           radius = 70,
-           daily_weather = daily_weather,
-           stations=stations,
-           meteo_variable_GHCND='TMAX'
-         )))
+all_experiments2=unique(daily_weather$Year_Exp)
 
 lapply(all_experiments,
        function(x)
@@ -85,6 +62,39 @@ lapply(all_experiments,
            stations=stations,
            meteo_variable_GHCND='TMIN'
          )))
+lapply(all_experiments,
+       function(x)
+         safeguarding(download_GHCND(
+           x,
+           radius = 70,
+           daily_weather = daily_weather,
+           stations=stations,
+           meteo_variable_GHCND='TMAX'
+         )))
+lapply(all_experiments,
+       function(x)
+         safeguarding(download_GHCND(
+           x,
+           radius = 70,
+           daily_weather = daily_weather,
+           stations=stations,
+           meteo_variable_GHCND='AWND'
+         )))
+
+lapply(all_experiments,
+       function(x)
+         safeguarding(download_GSOD(
+           x,
+           radius = 70,
+           daily_weather = daily_weather
+         )))
+lapply(all_experiments2,
+       function(x)
+         safeguarding(download_solar(
+           x,
+           daily_weather = daily_weather
+         )))
+
 
 lapply(all_experiments,
        function(x)
@@ -96,32 +106,3 @@ lapply(all_experiments,
            meteo_variable_GHCND='PRCP'
          )))
 
-lapply(all_experiments,
-       function(x)
-         safeguarding(download_GHCND(
-           x,
-           radius = 70,
-           daily_weather = daily_weather,
-           stations=stations,
-           meteo_variable_GHCND='PSUN'
-         )))
-
-lapply(all_experiments,
-       function(x)
-         safeguarding(download_GHCND(
-           x,
-           radius = 70,
-           daily_weather = daily_weather,
-           stations=stations,
-           meteo_variable_GHCND='EVAP'
-         )))
-
-lapply(all_experiments,
-       function(x)
-         safeguarding(download_GHCND(
-           x,
-           radius = 70,
-           daily_weather = daily_weather,
-           stations=stations,
-           meteo_variable_GHCND='PSUN'
-         )))

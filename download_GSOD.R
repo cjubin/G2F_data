@@ -30,6 +30,8 @@ download_GSOD <- function(Year_Exp,radius=60,daily_weather=daily_weather) {
   stations_close$yearend<-substr(stations_close$end,0,nchar(stations_close$end)-4)
   stations_close<-filter(stations_close,yearstart<2013&yearend>2019)
   
+  if (nrow(stations_close)>1){cat(paste('Close stations for',Year_Exp,'are more than 1.'))}
+  
   # ------------------------------------------------------------------------------
   #Download individual files for the stations of interest (selected before) from the ncei noaa server 
   # ------------------------------------------------------------------------------

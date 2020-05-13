@@ -68,6 +68,7 @@ download_GHCND <- function(Year_Exp,radius=70,daily_weather=daily_weather,meteo_
   
   
   write.table(all_data,file=paste('C:/Users/cathyjubin/Documents/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/GHCND/',year,'/',meteo_variable_GHCND,'_',Year_Exp,'.txt',sep = ''),col.names = T,row.names = F,sep = '\t',quote = F)
+  if (nrow(all_data)>1){cat(paste('Files for',Year_Exp,'assembled and written'))}
   
   return(all_data)
   
