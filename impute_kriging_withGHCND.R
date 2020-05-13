@@ -34,13 +34,38 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   d=d[,-ind]
   
   d$date=as.Date(as.character(d$date))
-  d=arrange(d,dates)
+  
+  ind2 <- which(!is.na(d[,eval(meteo_variable_GHCND)]))
+  d <- d[ind2,]
+  
   print('Data from GHCND stations prepared')
   
   
   ########################
-  ####Ordinary kriging####
+  ########################
   
+  
+  if(length(unique(d$id))<3){
+    d$day<-lubridate::yday(d$dates)
+    predicted.values<-d[which(d$day==yday(date_start)):which(d$day==yday(date_end)),meteo_variable_GHCND]
+    
+    
+    if (!is.null(variable_to_impute)) {
+      cors=cor(predicted.values,field_values,use = 'complete.obs')}
+    
+    
+    dates=seq(as.Date(date_start,tz="CET"),as.Date(date_end,tz="CET"),by='days')
+    predictions.table=cbind(Year_Exp,predicted.values,as.character(dates))
+    colnames(predictions.table)=c('Year_Exp',paste(variable_to_impute),'dates')
+    
+    to_save=list(predictions.table,cors)
+    names(to_save)<-c('predictions_YearExp','cors_YearExp')
+    
+    
+    }
+  ########################
+  ####Ordinary kriging####
+  if(length(unique(d$id))>=3){
   sub=d[,which(colnames(d)%in%c('station','longitude','latitude',meteo_variable_GHCND,'dates'))]
   
   sp::coordinates(sub)=c('longitude','latitude')
@@ -65,6 +90,7 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   #combine the 3 objects
   timeDF <- STIDF(tempminSP,tempminTM,data=tempminDF) 
   
+ 
   
   #variogram
   print('Computation variogram starts:')
@@ -208,6 +234,7 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   
   pred<-krigeST(values~1,data=timeDF,modelList =fitted.stvgm,newdata = grid.ST )
   predicted.values=pred@data$var1.pred
+  
   if (!is.null(variable_to_impute)) {
     cors=cor(predicted.values,field_values,use = 'complete.obs')}
   
@@ -218,6 +245,8 @@ impute_kriging_withGHCND <- function(Year_Exp,radius=50,meteo_variable_GHCND,dai
   
   to_save=list(predictions.table,cors,kriging_cor,kriging_rmse)
   names(to_save)<-c('predictions_YearExp','cors_YearExp','5f.cv.kriging.cor','5f.cv.kriging.rmse')
+  }
+  
   saveRDS(to_save,file=paste('GHCND/imputation/',variable_to_impute,'/',Year_Exp,'.RDS',sep=''))
   
   #return(to_save)
