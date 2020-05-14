@@ -5,6 +5,7 @@ library(gstat)
 library(Rcpp)
 library(raster)
 library(sp)
+library(proj4)
 library(mapdata)
 library(maps)
 library(maptools)
@@ -20,8 +21,6 @@ library(dplyr)
 #library(plyr)
 library(lubridate)
 
-args = commandArgs(trailingOnly = TRUE)
-x1 = args[1]
 
 
 ######IMPUTE MISSING VALUES #####
@@ -56,13 +55,7 @@ source('impute_kriging_withGHCND.R')
 source('safeguarding.R')
 
 
-max <- 5
-x <- seq_along(1:length(all_experiments))
-d1 <- split(1:length(all_experiments), ceiling(x / max))
-
-
-
-mclapply(all_experiments[d1[[x1]]],
+mclapply(all_experiments,
          function(x)
            safeguarding(
              impute_kriging_withGHCND(
@@ -73,4 +66,4 @@ mclapply(all_experiments[d1[[x1]]],
                name_in_table = 'TMAX',
                daily_weather = daily_weather
              )
-           ), mc.cores = cores)
+           ),mc.cores=cores)

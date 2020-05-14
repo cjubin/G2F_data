@@ -5,12 +5,13 @@ library(gstat)
 library(Rcpp)
 library(raster)
 library(sp)
+library(proj4)
 library(mapdata)
 library(maps)
 library(maptools)
 library(xts)
 library(spacetime)
-#library(rgdal)
+library(rgdal)
 source('fahrenheit_to_celsius.R')
 
 `%notin%` <- Negate(`%in%`)
@@ -20,7 +21,6 @@ library(dplyr)
 #library(plyr)
 library(lubridate)
 
-args = commandArgs(trailingOnly = TRUE)
 
 
 ######IMPUTE MISSING VALUES #####
@@ -48,19 +48,14 @@ all_experiments = unique(daily_weather$Year_Exp)[unique(daily_weather$Year_Exp) 
 
 
 
-#cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
-#library(doParallel)
+cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
+library(doParallel)
 source('impute_kriging_withGSOD.R')
 source('impute_kriging_withGHCND.R')
 source('safeguarding.R')
 
 
-max <- 5
-x <- seq_along(1:length(all_experiments))
-d1 <- split(1:length(all_experiments), ceiling(x / max))
-
-
-lapply(all_experiments,
+mclapply(all_experiments,
          function(x)
            safeguarding(
              impute_kriging_withGHCND(
@@ -71,4 +66,4 @@ lapply(all_experiments,
                name_in_table = 'TMIN',
                daily_weather = daily_weather
              )
-           ))
+           ),mc.cores=cores)
