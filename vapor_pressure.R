@@ -1,5 +1,5 @@
 get.ea <- function(rhmin, rhmax, tmin, tmax){
-  esmn <- get.esmn(tmin) # other fun same as James suggested
+  esmn <- get.esmn(tmin)
   esmx <- get.esmx(tmax) 
   ea <- ((esmn * rhmax/100) + (esmx * rhmin/100)) / 2
   return(ea)
