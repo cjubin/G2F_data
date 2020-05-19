@@ -1,7 +1,14 @@
+#' rhmin, rhmax and rhmean in %
 get.ea <- function(rhmin, rhmax, tmin, tmax){
   esmn <- get.esmn(tmin)
   esmx <- get.esmx(tmax) 
   ea <- ((esmn * rhmax/100) + (esmx * rhmin/100)) / 2
+  return(ea)
+}
+get.ea.with.rhmean <- function(rhmin, rhmax, rhmean){
+  esmn <- get.esmn(tmin)
+  esmx <- get.esmx(tmax) 
+  ea <- (rhmean/100) * ((esmn + esmx) / 2)
   return(ea)
 }
 
