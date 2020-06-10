@@ -1,12 +1,11 @@
 #' Imputation of a meteorological variable based on a field location with geographical coordinates
 #'
-#' \code{impute_kriging_withGHCND} interpolates values for a specific meteorological variable from ISD stations given a time frame for a specific location
+#' \code{impute_wind} interpolates values for a specific meteorological variable from ISD stations given a time frame for a specific location
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
 #' @param radius Numeric. Distance from the field location to consider to interpolate.
-#' @param meteo_variable_GHCND Character. GHCND element names (= variable measured at the GHCND station): TMAX, TMIN, PRCP
 #' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested' and @variable_to_impute
-#' @param variable_to_impute. Character.
-#' @param name_in_table. Character
+#' @param meteo_variable_GSOD. Character. Name of the variable in the GSOD datasets
+#' @param name_in_table. Character. Name of the variable in the original G2F datasets
 
 rm(list = ls())
 library(rnoaa)
@@ -62,7 +61,6 @@ stations <- filter(stations, first_year <= 2013)
 impute_wind2 <-
   function(Year_Exp,
            radius = 70,
-           meteo_variable_GHCND = 'awnd',
            meteo_variable_GSOD = 'WDSP',
            daily_weather = daily_weather,
            name_in_table = 'MEANWINDSPEED') {
