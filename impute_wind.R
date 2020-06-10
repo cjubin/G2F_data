@@ -1,8 +1,8 @@
 #' Imputation of a meteorological variable based on a field location with geographical coordinates
 #'
-#' \code{impute_wind} interpolates values for a specific meteorological variable from ISD stations given a time frame for a specific location
+#' \code{impute_wind} interpolates values for a specific meteorological variable using Inverse Distance Weighting or nearby station if only 1 station.
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
-#' @param radius Numeric. Distance from the field location to consider to interpolate.
+#' @param radius Numeric. Distance from the field location to consider to capture GSOD stations.
 #' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested' and @variable_to_impute
 #' @param meteo_variable_GSOD. Character. Name of the variable in the GSOD datasets
 #' @param name_in_table. Character. Name of the variable in the original G2F datasets
