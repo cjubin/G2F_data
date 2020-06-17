@@ -94,9 +94,9 @@ daily_weather[which(daily_weather$sum_rainfall<0),'flagged_rain']='flagged'
 daily_weather[which(daily_weather$sum_rainfall<0),'sum_rainfall']=NA
 
 daily_weather[is.na(daily_weather$flagged_rain),'flagged_rain']='flagged'
-colnames(daily_weather)[26]<-'PRCP'
 
 daily_weather=arrange(daily_weather,Year_Exp,Day.of.Year)
 
 
 write.table(daily_weather,'daily_weather_prcp_processed1.txt',col.names = T,row.names = F,sep = '\t',quote = F)
+
