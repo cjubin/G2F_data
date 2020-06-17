@@ -1,18 +1,14 @@
 rm(list=ls())
-library(rnoaa)
-library(GSODR)
-library(countyweather)
 
 
 library(dplyr)
-#library(plyr)
 library(lubridate)
 
 options(noaakey = "ueWgGjcckAdRLEXbpNtePVgbRWXmiQBG")
 
 
 weather = read.table(
-  '~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/weather_semihourly.txt',
+  'weather_semihourly.txt',
   header = T,
   sep = '\t',
   na.strings = c(NA,''),
@@ -22,7 +18,7 @@ weather = read.table(
 )
 
 daily_weather=read.table(
-  '~/Final_datasets_G2F/ALL_WEATHER/environmental_data_processing_1/Weather_soil_processing_1/daily_weather.txt',
+  'daily_weather.txt',
   header = T,
   sep = '\t',
   na.strings = c(NA,''),
@@ -92,8 +88,8 @@ daily_weather<-merge(daily_weather,unique(j),by=c('Day.of.Year','Year_Exp'),all.
 
 #Second Control range: daily values
 
-daily_weather[which(daily_weather$sum_rainfall>=200),'flagged_rain']='flagged'
-daily_weather[which(daily_weather$sum_rainfall>=200),'sum_rainfall']=NA
+daily_weather[which(daily_weather$sum_rainfall>=160),'flagged_rain']='flagged'
+daily_weather[which(daily_weather$sum_rainfall>=160),'sum_rainfall']=NA
 daily_weather[which(daily_weather$sum_rainfall<0),'flagged_rain']='flagged'
 daily_weather[which(daily_weather$sum_rainfall<0),'sum_rainfall']=NA
 
@@ -104,4 +100,3 @@ daily_weather=arrange(daily_weather,Year_Exp,Day.of.Year)
 
 
 write.table(daily_weather,'daily_weather_prcp_processed1.txt',col.names = T,row.names = F,sep = '\t',quote = F)
-
