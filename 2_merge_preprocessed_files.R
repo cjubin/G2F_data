@@ -98,14 +98,25 @@ dat=arrange(dat,Year_Exp,Day.of.Year)
 write.table(dat,file='2_merged_dataset.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
 # ------------------------------------------------------------------------------
+# Coordinates MNH1_2017 to change
+# ------------------------------------------------------------------------------
+dat[dat$Year_Exp == '2017_MNH1', 'lat'] <-
+  44.06981
+dat[dat$Year_Exp == '2017_MNH1', 'long'] <-
+  -93.5338
+
+
+# ------------------------------------------------------------------------------
 # Add elevation
 # ------------------------------------------------------------------------------
 
 library(elevatr)
-loc=unique(dat[,c('lat','long')])
+loc=unique(dat[,c('long','lat')])
 elev<-get_elev_point(locations=loc,units='meters',prj = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
 elev_df=cbind(loc,elev@data)
 dat$elev=elev_df[match(dat$lat,elev_df$lat),'elevation']
 dat=arrange(dat,Year_Exp,Day.of.Year)
 write.table(dat,file='2_merged_dataset_with_elevation.txt',col.names = T,row.names = F,sep = '\t',quote = F)
+
+
 
