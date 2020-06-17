@@ -48,6 +48,7 @@ daily_weather = read.table(
 ##WIND: flagged values to be imputed
 # ------------------------------------------------------------------------------
 ##Control range semi-hourly or 15-, 20-minutes data values
+##Plausible value check according to Guidelines on Quality Control Procedures for Data from Automatic Weather Stations  (WORLD METEOROLOGICAL ORGANIZATION)
 weather$flagged_WIND_instant=NA
 weather$Wind.Speed..m.s.=as.numeric(weather$Wind.Speed..m.s.)
 weather[which(weather$Wind.Speed..m.s.>75),'flagged_WIND_instant']<-'flagged'
@@ -122,27 +123,40 @@ mean_wind<-unique(mean_wind)
 
 mean_wind=arrange(mean_wind,Year_Exp,Day.of.Year)
 
+daily_weather<-merge(daily_weather,mean_wind,by=c('Day.of.Year','Year_Exp'),all.x = T)
+daily_weather=arrange(daily_weather,Year,Year_Exp,Day.of.Year)
+
 # ------------------------------------------------------------------------------
-#Step test: absolute difference between two consecutive days should be <10 m/s:
+# Step test: absolute difference between two consecutive days should be <10 m/s.
+# Persistence test: daily mean wind speed should not be strictly equal to the value of the day before or to the day even before:
+# U(d) != U(d-1) != U(d-2);
 # ------------------------------------------------------------------------------
 
 
 test  <- 
-  mean_wind %>%
+  daily_weather[,c('Year_Exp','Day.of.Year','flagged_WIND','MEANWINDSPEED')] %>%
   group_by(Year_Exp) %>%
-  mutate(lag = dplyr::lag(MEANWINDSPEED, n = 1, default = NA))%>%
-  mutate(diff = abs(MEANWINDSPEED-lag))%>%
-  filter(diff<10&diff!=0)%>%
-  dplyr::select(Year_Exp,Day.of.Year,MEANWINDSPEED)
+  mutate(lag_1 = dplyr::lag(MEANWINDSPEED, n = 1, default = NA))%>%
+  mutate(lag_2 = dplyr::lag(MEANWINDSPEED, n = 2, default = NA))%>%
+  mutate(diff_1 = abs(MEANWINDSPEED-lag_1))%>%
+  mutate(diff_2 = abs(MEANWINDSPEED-lag_2))%>%
+  filter(diff_1<10&diff_1!=0&diff_2!=0)%>%
+  mutate(flagged_WIND = 'OK')%>%
+  dplyr::select(Year_Exp,Day.of.Year,MEANWINDSPEED,flagged_WIND)
 
 mean_wind<-test
+
+
+
+
 
 # ------------------------------------------------------------------------------
 #Add not flagged daily computed MEANWINDSPEED to the daily_weather table (based on data from the field station)
 # ------------------------------------------------------------------------------
+daily_weather$MEANWINDSPEED<-NA
 daily_weather<-merge(daily_weather,mean_wind,by=c('Day.of.Year','Year_Exp'),all.x = T)
 daily_weather=arrange(daily_weather,Year,Year_Exp,Day.of.Year)
-
+daily_weather=daily_weather[,c(1:26,29,30)]
 
 
 
