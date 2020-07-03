@@ -1,5 +1,5 @@
 
-derive_W_growth_stages=function(file='C:/Users/cathyjubin/Documents/allweather2.txt'){
+derive_W_growth_stages=function(file='C:/Users/cathyjubin/Documents/allweather_with_irrigation.txt'){
   #setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/Weather/weather_growth_stages")
   weather=read.table(file,header = T)
   
@@ -195,4 +195,3 @@ pheno$counties=key_counties[match(paste(pheno$lon,pheno$lat,sep = '_'),paste(key
 #setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/Weather/weather_growth_stages")
 
 write.table(pheno,'phenos_with_EC_covariates.txt',col.names = T,row.names=F,sep="\t",quote = F)
-
