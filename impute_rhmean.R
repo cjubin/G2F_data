@@ -1,6 +1,6 @@
 #' Imputation of a meteorological variable based on a field location with geographical coordinates
 #'
-#' \code{impute_rhmean2} interpolates values for a specific meteorological variable using Inverse Distance Weighting or nearby station if only 1 station.
+#' \code{impute_rhmean} interpolates values for a specific meteorological variable using Inverse Distance Weighting or nearby station if only 1 station.
 #' @param Year_Exp Character. Experiment (associated iwth a specific field location) in the G2F dataset which needs to be imputed.
 #' @param radius Numeric. Distance from the field location to consider to capture GSOD stations.
 #' @param daily_weather. Data.frame containing at least the following columns: a column 'Year_Exp' containing the specific element used in @Year_Exp, 'long', 'lat', 'Date.Planted', 'Date.Harvested' and @variable_to_impute
@@ -58,7 +58,7 @@ daily_weather[daily_weather$Year_Exp == '2017_MNH1', 'long'] <-
 
 
 
-impute_rhmean2 <-
+impute_rhmean <-
   function(Year_Exp,
            radius = 70,
            meteo_variable_GSOD = c('TEMP', 'DEWP', 'MAX', 'MIN'),
@@ -495,21 +495,11 @@ impute_rhmean2 <-
 lapply(unique(daily_weather$Year_Exp),
        function(x)
          safeguarding(
-           impute_rhmean2(
+           impute_rhmean(
              Year_Exp = x,
              daily_weather = daily_weather ,
              radius = 70
              
            )
          ))
-canada_2017 = read.table('canada_2017.txt', header = T)
-lapply(c('2017_ONH1','2017_ONH2'),
-       function(x)
-         safeguarding(
-           impute_rhmean2(
-             Year_Exp = x,
-             daily_weather = canada_2017 ,
-             radius = 70
-             
-           )
-         ))
+
