@@ -370,6 +370,7 @@ elev_df=cbind(loc,elev@data)
 geo_data_fields$elev=elev_df[,'elevation']
 geo_data_fields=arrange(geo_data_fields,Year_Exp)
 
+## Need to add manually for Canadian loc.
 geo_data_fields[geo_data_fields$Year_Exp=='2014_ONH1',c('elev')]<-336
 geo_data_fields[geo_data_fields$Year_Exp=='2014_ONH2',c('elev')]<-204
 geo_data_fields[geo_data_fields$Year_Exp=='2015_ONH1',c('elev')]<-328
