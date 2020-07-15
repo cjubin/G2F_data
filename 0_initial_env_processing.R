@@ -414,6 +414,7 @@ daily_weather$day <- with(daily_weather, format(strptime(paste(Year, Day.of.Year
 
 ## Order daily data frame
 daily_weather <-arrange(daily_weather,Year_Exp,Day.of.Year)
+write.table(daily_weather,'/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/daily_weather_afterstep0.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
 
 
