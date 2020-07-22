@@ -1,6 +1,7 @@
 #' Find approximate dates for flowering phase, i.e. from
 #' initiation of silks to the date for which abortion does not occur anymore,
 #' based on the weather data (only thermal time)
+#' Especially needed when silking was not scored.
 #'
 #' \code{estimate_flowering_phase} returns a data.frame with approximate start and end of flowering time for each hybrid (i.e. pedigree column),
 #' based on data from other experiments with these hybrids and using weather data at the location to predict.
