@@ -947,12 +947,12 @@ for (i in set_locations[set_locations %in% c(
     
     summary[n,  'RHMAX.pearson.cor.daily.field.vs.interpolated'] <-
       cor(as.numeric(as.vector(readRDS(v)[[1]][, 'rhmax'])),
-          daily_weather[daily_weather$Year_Exp == v, 'HMAX'],
+          daily_weather[daily_weather$Year_Exp == i, 'HMAX'],
           method = 'pearson',
           use = 'complete.obs')
     summary[n,  'RHMIN.pearson.cor.daily.field.vs.interpolated'] <-
       cor(as.numeric(as.vector(readRDS(v)[[1]][, 'rhmin'])),
-          daily_weather[daily_weather$Year_Exp == v, 'HMIN'],
+          daily_weather[daily_weather$Year_Exp == i, 'HMIN'],
           method = 'pearson',
           use = 'complete.obs')
   }
