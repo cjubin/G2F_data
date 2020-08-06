@@ -582,20 +582,20 @@ for (meteo_variable in c('WDSP')) {
         summary[n,'name_1nearest_station'] <- readRDS(v)[['min_dist_name']]
         
         summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- cor(as.numeric(as.vector(readRDS(v)[[1]][, 'transformed_u2'])),
-                                                                        as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values'])),
+                                                                        as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values']))*0.748,
                                                                         method = 'pearson',
                                                                         use = 'complete.obs')
         if(readRDS(v)[['min_dist']]<1.5){
           print(v)
           df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
           df<-cbind(i,df[,1],0.748 * df[,2])
-          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          write.table(df,file=paste('selected_model_',i,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
           
         }else{
           df<-readRDS(v)[[1]][,c('dates', 'transformed_u2')]
           df<-cbind(i,df)
           
-          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          write.table(df,file=paste('selected_model_',i,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
         } 
         
        
@@ -627,7 +627,7 @@ for (meteo_variable in c('WDSP')) {
         summary[n,'name_1nearest_station'] <- readRDS(v)[[4]]
         
         summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- cor(as.numeric(as.vector(readRDS(v)[[1]][, 'transformed_u2'])),
-                                                                        as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values'])),
+                                                                        as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values']))*0.748,
                                                                         method = 'pearson',
                                                                         use = 'complete.obs')
         
@@ -635,20 +635,20 @@ for (meteo_variable in c('WDSP')) {
           print(v)
           df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
           df<-cbind(i,df[,1],0.748 * df[,2])
-          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          write.table(df,file=paste('selected_model_',i,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
           
         }else{
           df<-readRDS(v)[[1]][,c('dates', 'transformed_u2')]
           df<-cbind(i,df)
           
-          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          write.table(df,file=paste('selected_model_',i,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
         }
       }
     } else {
       
       
       print(paste0(i,': only 1 station'))
-      s=
+      
       summary[n, 'interpolation_method'] <- 'only_1_station_available'
       summary[n, "weather.network.used"] <- 'GSOD'
       summary[n, "Year_Exp"] <- v
@@ -671,9 +671,8 @@ for (meteo_variable in c('WDSP')) {
       
       summary[n,'distance_1nearest_station_km'] <- readRDS(paste0(i,'_1station.RDS'))[[4]]
       
-      if (readRDS(paste0(i,'_1station.RDS'))[[3]]=='72562194063'){summary[n,'name_1nearest_station'] <- 'OGALLALA SEARLE FIELD AIRPORT, NE US'}
-      if (readRDS(paste0(i,'_1station.RDS'))[[3]]=='72562024023'){summary[n,'name_1nearest_station'] <- 'NORTH PLATTE REGIONAL AIRPORT, NE US'}
       
+      summary[n,'name_1nearest_station'] <- readRDS(paste0(i,'_1station.RDS'))[[5]]
       
       
       summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- NA
@@ -682,7 +681,7 @@ for (meteo_variable in c('WDSP')) {
       df<-cbind(i,df)
       
       
-      write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      write.table(df,file=paste('selected_model_',i,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
       
       
       
