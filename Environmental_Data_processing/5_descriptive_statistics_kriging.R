@@ -508,7 +508,7 @@ Winning_kriging_model$Difference.selected.model.nearest.station=Winning_kriging_
 Winning_kriging_model[which(Winning_kriging_model$`%NA.field.season`>0.4),'Total_partial_replacement']<-'Total'
 Winning_kriging_model[which(Winning_kriging_model$`%NA.field.season`<0.4),'Total_partial_replacement']<-'Partial'
 
-Winning_kriging_model[which(abs(Winning_kriging_model$Difference.selected.model.field.station)>90),'Total_partial_replacement']<-'Total'
+Winning_kriging_model[which(abs(Winning_kriging_model$Difference.selected.model.field.station)>100),'Total_partial_replacement']<-'Total'
 
 
 setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation")
@@ -1022,4 +1022,3 @@ write.table(
   quote = F,
   sep = '\t'
 )
-
