@@ -2,7 +2,7 @@ rm(list = ls())
 
 
 ## Load or install packages
-
+setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing")
 source('fahrenheit_to_celsius.R')
 
 packages = c("xts","data.table","rgdal","readxl","opencage","intrval","dplyr","USAboundaries","ggplot2","rnoaa","stringr","ggmap","revgeo","lubridate")
@@ -158,11 +158,11 @@ for (meteo_variable in c('TMAX', 'TMIN')) {
       sep = ''
     )
   )
-  list_files1 = list.files(pattern = ".RDS")
   
   
   
-  summary = as.data.frame(matrix(ncol = 13, nrow = length(list.files(pattern = ".RDS"))))
+  
+  summary = as.data.frame(matrix(ncol = 13, nrow = length(set_locations)))
   colnames(summary) = c(
     'Year_Exp',
     'meteo_variable',
@@ -176,7 +176,7 @@ for (meteo_variable in c('TMAX', 'TMIN')) {
     'RMSE.interpolated.with.field.obs',
     'weather.network.used',
     'interpolation_method',
-    'near_or_interpolated'
+    'near_or_interpolated_selected'
    )
   
   summary$meteo_variable = eval(meteo_variable)
@@ -185,7 +185,7 @@ for (meteo_variable in c('TMAX', 'TMIN')) {
   predictions <- list()
   
   n = 1
-  for (i in list_files1) {
+  for (i in paste0(set_locations,'.RDS')) {
     print(i)
     
     setwd(
@@ -197,9 +197,7 @@ for (meteo_variable in c('TMAX', 'TMIN')) {
       )
     )
     v = str_sub(i, 1, nchar(i) - 4)
-    if(v%notin%set_locations){
-      print(v)
-      next}
+    
     summary[n, 'Year_Exp'] <- v
     summary[n, 'flagged.NA.percent.growing.season.field.data'] <-
       length(which(is.na(daily_weather[daily_weather$Year_Exp == v, meteo_variable]))) /
@@ -287,12 +285,12 @@ for (meteo_variable in c('TMAX', 'TMIN')) {
     
     if(nearest$min_dist<2){
       near_data<-as.data.frame(nearest$predictions_YearExp[,c('Year_Exp',meteo_variable,'date')])
-      summary$near_or_interpolated[n]<-'near'
+      summary$near_or_interpolated_selected[n]<-'near'
       write.table(near_data,file=paste('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/',meteo_variable,'/selected_model_',v,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
       }
     else{
       colnames(selected_data)<-c('Year_Exp','TMAX','date')
-      summary$near_or_interpolated[n]<-'interpolated'
+      summary$near_or_interpolated_selected[n]<-'interpolated'
       write.table(selected_data,file=paste('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/',meteo_variable,'/selected_model_',v,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
       
     }
@@ -322,4 +320,387 @@ for (meteo_variable in c('TMAX', 'TMIN')) {
     sep = '\t'
   )
 }
+
+
+
+
+# ------------------------------------------------------------------------------
+# Metorological variables: 'PRCP'
+# ------------------------------------------------------------------------------
+
+setwd('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/')
+
+Winning_kriging_model = as.data.frame(matrix(NA, nrow = length(set_locations), ncol = 19))
+
+colnames(Winning_kriging_model) = c(
+  'Year_Exp',
+  'Number.days.growing.season',
+  'Total_field_after_processing(mm)',
+  '%NA.field.season',
+  'radius',
+  'interpolation_method',
+  'nb_stations_used_for_kriging',
+  'Winning_kriging_model',
+  'Total.winning.model(mm)',
+  'Total.with.elevation(mm)',
+  'RMSE.model.with.elevation',
+  'Pearson.Cor.model.with.elevation',
+  'Total.no.elevation(mm)',
+  'RMSE.model.no.elevation',
+  'Pearson.Cor.model.no.elevation',
+  'weather.network.used',
+  'Total.near.station(mm)',
+  'Name.near.station',
+  'near_or_interpolated_selected'
+)
+
+
+Winning_kriging_model$interpolation_method<-'kriging'
+Winning_kriging_model[,c(3,4,9,10,11,12,13,14,15,17)]<-apply(Winning_kriging_model[, c(3,4,9,10,11,12,13,14,15,17)], 2,as.numeric)
+
+n = 1
+for (s in set_locations) {
+  
+  print(s)
+  
+  
+  Winning_kriging_model[n, 'Year_Exp'] <- s
+  Winning_kriging_model[n, 'radius'] <-70
+  if (s%in%c('2014_ONH1','2014_ONH2','2015_ONH1','2015_ONH2','2016_ONH1','2016_ONH2','2017_ONH1','2017_ONH2','2018_ONH1','2018_ONH2')){
+    Winning_kriging_model[n, 'weather.network.used'] <-'WeatherCAN'}
+  else{Winning_kriging_model[n, 'weather.network.used'] <-'GHCND'}
+  
+  
+  Winning_kriging_model[n, 'Number.days.growing.season'] <-length(daily_weather[daily_weather$Year_Exp==s,'PRCP'])
+  Winning_kriging_model[n, 'Total_field_after_processing(mm)']<-sum(daily_weather[daily_weather$Year_Exp==s,'PRCP'],na.rm = T)
+  Winning_kriging_model[n, '%NA.field.season']<-length(which(is.na(daily_weather[daily_weather$Year_Exp==s,'PRCP'])))/length(daily_weather[daily_weather$Year_Exp==s,'PRCP'])
+  
+  
+  setwd('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/PRCP_nearest')
+  
+  
+  vector_nearest_station<-readRDS(paste(s,'_1station.RDS',sep = ''))
+  Winning_kriging_model[n, 'Total.near.station(mm)']<-sum(as.numeric(vector_nearest_station[[1]][,2]),na.rm = T)
+  Winning_kriging_model[n,  'Distance.near.station']<-as.numeric(as.character(vector_nearest_station[['min_dist']]))
+  Winning_kriging_model[n, 'Name.near.station']<-vector_nearest_station[['min_dist_station_name']]
+  
+  
+  
+  
+  setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/PRCP_FINAL")
+  
+  if (!file.exists(paste('PRCP_elev',s,'.RDS',sep = ''))){
+    print(paste0(s,': kriging could not finished due to size data -- we use nearest station'))
+    Winning_kriging_model[n, 'Winning_kriging_model'] <- 'nearest_station'
+    Winning_kriging_model[n, 'Total.winning.model(mm)']<-Winning_kriging_model[n, 'Total.near.station(mm)']
+    write.table(vector_nearest_station[[1]][,c('Year_Exp', 'PRCP', 'date')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+    
+    n <- n + 1
+    next
+  }
+  
+  elev_model<-readRDS(paste('PRCP_elev',s,'.RDS',sep = ''))[[1]]
+  
+  elev_model<-cbind(elev_model,vector_nearest_station)
+  
+  if (!file.exists(paste('elev_results_LOOCV_',s,'.RDS',sep = ''))|!file.exists(paste('no_elev_results_LOOCV_',s,'.RDS',sep = ''))){
+    print(paste0(s,': no results regarding LOOCV here '))
+    Winning_kriging_model[n, 'Winning_kriging_model'] <- paste('elevation_','summetric_Vgm3',sep='')
+    Winning_kriging_model[n, 'Total.winning.model(mm)']<-sum(no_elev_model[,'summetric_Vgm3'],na.rm=T)
+    selected_data<-no_elev_model[,c('predictions.table','summetric_Vgm3','as.character(dates)')]
+    colnames(selected_data)<-c('Year_Exp','Kriging.data','dates')
+    write.table(selected_data,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+    
+    n <- n + 1
+    next
+  } else{
+    LOOCV<-readRDS(paste('elev_results_LOOCV_',s,'.RDS',sep = ''))
+    
+    
+    LOOCV_min_RMSE_elev<- names(which.min(unlist(lapply(LOOCV[['kriging_rmse']][names(LOOCV[['kriging_rmse']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T)))))
+    LOOCV_max_cor_elev<- names(which.max(unlist(lapply(LOOCV[['kriging_cor']][names(LOOCV[['kriging_cor']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T)))))
+    
+    
+    Winning_kriging_model[n, 'Total.with.elevation(mm)'] <-sum(elev_model[,LOOCV_min_RMSE_elev])
+    Winning_kriging_model[n, 'RMSE.model.with.elevation'] <-min(unlist(lapply(LOOCV[['kriging_rmse']][names(LOOCV[['kriging_rmse']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T))),na.rm=T)
+    Winning_kriging_model[n, 'Pearson.Cor.model.with.elevation'] <-max(unlist(lapply(LOOCV[['kriging_cor']][names(LOOCV[['kriging_cor']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T))),na.rm=T)
+    
+    
+    no_elev_model<-readRDS(paste('PRCPno_elev',s,'.RDS',sep = ''))[[1]]
+    no_elev_model<-cbind(no_elev_model,vector_nearest_station)
+    
+    
+    LOOCV<-readRDS(paste('no_elev_results_LOOCV_',s,'.RDS',sep = ''))
+    names(LOOCV[['kriging_rmse']])[names(LOOCV[['kriging_rmse']])=='summetric_Vgm']<-'summetric_Vgm1'
+    names(LOOCV[['kriging_cor']])[names(LOOCV[['kriging_cor']])=='summetric_Vgm']<-'summetric_Vgm1'
+    LOOCV_min_RMSE_noelev<- names(which.min(unlist(lapply(LOOCV[['kriging_rmse']][names(LOOCV[['kriging_rmse']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T)))))
+    
+    LOOCV_max_cor_noelev<- names(which.max(unlist(lapply(LOOCV[['kriging_cor']][names(LOOCV[['kriging_cor']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T)))))
+    
+    Winning_kriging_model[n, 'Total.no.elevation(mm)'] <-sum(no_elev_model[,LOOCV_min_RMSE_noelev])
+    Winning_kriging_model[n, 'RMSE.model.no.elevation'] <-min(unlist(lapply(LOOCV[['kriging_rmse']][names(LOOCV[['kriging_rmse']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T))),na.rm=T)
+    Winning_kriging_model[n, 'Pearson.Cor.model.no.elevation'] <-max(unlist(lapply(LOOCV[['kriging_cor']][names(LOOCV[['kriging_cor']]) %in% c("productsum_Vgm","separable_Vgm") == FALSE]  , function(x)mean(x,na.rm=T))),na.rm=T)
+    
+    setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/PRCP_FINAL")
+    
+    if(Winning_kriging_model[n,'Distance.near.station']<1.5){
+      Winning_kriging_model[n, 'Winning_kriging_model'] <- 'nearest_station'
+      Winning_kriging_model[n, 'Total.winning.model(mm)']<-Winning_kriging_model[n, 'Total.near.station(mm)']
+      write.table(vector_nearest_station[[1]][,c('Year_Exp', 'PRCP', 'date')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+    }
+    else if (Winning_kriging_model[n, 'RMSE.model.no.elevation']<Winning_kriging_model[n, 'RMSE.model.with.elevation']){
+      if(max(no_elev_model[,LOOCV_min_RMSE_noelev])<100&var(no_elev_model[,LOOCV_min_RMSE_noelev])>4){
+        Winning_kriging_model[n, 'Winning_kriging_model'] <- paste('no_elevation_',LOOCV_min_RMSE_noelev,sep='')
+        Winning_kriging_model[n, 'Total.winning.model(mm)']<-Winning_kriging_model[n, 'Total.no.elevation(mm)']
+        selected_data<-no_elev_model[,c('predictions.table',LOOCV_min_RMSE_noelev,'as.character(dates)')]
+        colnames(selected_data)<-c('Year_Exp','Kriging.data','dates')
+        write.table(selected_data,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      }else {Winning_kriging_model[n, 'Winning_kriging_model'] <-'issue_with_model'}
+    }else {
+      if(max(elev_model[,LOOCV_min_RMSE_elev])<100&var(elev_model[,LOOCV_min_RMSE_elev])>4){
+        Winning_kriging_model[n, 'Winning_kriging_model'] <- paste('elevation_',LOOCV_min_RMSE_elev,sep='')
+        Winning_kriging_model[n, 'Total.winning.model(mm)']<-Winning_kriging_model[n, 'Total.with.elevation(mm)']
+        selected_data<-elev_model[,c('predictions.table',LOOCV_min_RMSE_elev,'as.character(dates)')]
+        colnames(selected_data)<-c('Year_Exp','Kriging.data','dates')
+        write.table(selected_data,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      } else {Winning_kriging_model[n, 'Winning_kriging_model'] <-'issue_with_model'}}
+    
+    
+    if (Winning_kriging_model[n, 'Winning_kriging_model']=='issue_with_model'){
+      if('summetric_Vgm3'%in%colnames(no_elev_model)){
+        Winning_kriging_model[n, 'Winning_kriging_model'] <- paste('elevation_','summetric_Vgm3',sep='')
+        Winning_kriging_model[n, 'Total.winning.model(mm)']<-sum(no_elev_model[,'summetric_Vgm3'],na.rm=T)
+        selected_data<-no_elev_model[,c('predictions.table','summetric_Vgm3','as.character(dates)')]
+        colnames(selected_data)<-c('Year_Exp','Kriging.data','dates')
+        
+        write.table(selected_data,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      }
+      else {
+        Winning_kriging_model[n, 'Winning_kriging_model'] <- paste('elevation_','summetric_Vgm5',sep='')
+        Winning_kriging_model[n, 'Total.winning.model(mm)']<-sum(no_elev_model[,'summetric_Vgm5'],na.rm=T)
+        selected_data<-no_elev_model[,c('predictions.table','summetric_Vgm5','as.character(dates)')]
+        colnames(selected_data)<-c('Year_Exp','Kriging.data','dates')
+        
+        write.table(selected_data,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      }
+      
+    }
+    
+    year=str_sub(v,1,4)
+    
+    setwd(paste0("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/data_files/",year))
+    Winning_kriging_model[n, 'nb_stations_used_for_kriging']<-length(unique(read.table(paste0('PRCP_',v,'.txt'),header=T,sep='\t')$id))
+    
+    n <- n + 1
+  }
+  
+  
+  
+}
+
+
+
+Winning_kriging_model$Difference.selected.model.field.station=Winning_kriging_model$`Total.winning.model(mm)`-Winning_kriging_model$`Total_field_after_processing(mm)`
+Winning_kriging_model$Difference.selected.model.nearest.station=Winning_kriging_model$`Total.winning.model(mm)`-Winning_kriging_model$`Total.near.station(mm)`
+
+##Total or partial replacement by interpolated/nearest stations based on 1)% NA data from field 2)Difference between field and interpolated or nearest stations
+
+Winning_kriging_model[which(Winning_kriging_model$`%NA.field.season`>0.4),'Total_partial_replacement']<-'Total'
+Winning_kriging_model[which(Winning_kriging_model$`%NA.field.season`<0.4),'Total_partial_replacement']<-'Partial'
+
+Winning_kriging_model[which(abs(Winning_kriging_model$Difference.selected.model.field.station)>90),'Total_partial_replacement']<-'Total'
+
+
+setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation")
+write.table(Winning_kriging_model,paste0('PRCP_summary.txt'),col.names = T,row.names = F,sep = '\t',quote = F)
+
+
+# ------------------------------------------------------------------------------
+# Metorological variables: 'WDSP'
+# ------------------------------------------------------------------------------
+
+for (meteo_variable in c('WDSP')) {
+  
+  # 1) Reading the imputed data using IDW and constructing summarized dataset from IDW results before imputation
+  
+  setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/AWND_GSOD_WeatherCAN")
+  
+  summary = as.data.frame(matrix(NA, ncol = 12, nrow = length(set_locations)))
+  colnames(summary) = c(
+    'Year_Exp',
+    'meteo_variable',
+    'flagged.NA.percent.growing.season.field.data',
+    'nb.weather.stations.used',
+    'radius',
+    'growing_season_length_(days)',
+    'pearson.cor.daily.field.vs.interpolated',
+    'weather.network.used',
+    'interpolation_method',
+    'distance_1nearest_station_km',
+    'name_1nearest_station',
+    'pearson.cor.interpolated.vs.nearby.stations'
+  )
+  
+  summary$meteo_variable = eval(meteo_variable)
+  summary$radius = 70
+  
+  predictions <- list()
+  
+  n = 1
+  for (i in set_locations) {
+    print(i)
+    v=paste0(i,'_IDW.RDS')
+    
+    if (file.exists(v)){
+      
+      summary[n, 'interpolation_method'] <- 'inverse_distance_weighting'
+      
+      if (i%in%c('2014_ONH1','2014_ONH2','2015_ONH1','2015_ONH2','2016_ONH1','2016_ONH2','2017_ONH1','2017_ONH2','2018_ONH2')) {
+        summary[n, 'weather.network.used'] <- 'WeatherCAN'
+        summary[n, "Year_Exp"] <- v
+        summary[n, "flagged.NA.percent.growing.season.field.data"] <-
+          sum(is.na(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])) /
+          length(daily_weather[daily_weather$Year_Exp == i,'MEANWINDSPEED'])
+        
+        summary[n, "growing_season_length_(days)"] <-
+          length(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])
+        
+        if (length(which(is.na(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])))>summary[n, "growing_season_length_(days)"]/2){
+          summary[n, "pearson.cor.daily.field.vs.interpolated"] <- NA
+        }
+        
+        else{summary[n, "pearson.cor.daily.field.vs.interpolated"] <-
+          cor(as.numeric(as.vector(readRDS(v)[[1]][, 'transformed_u2'])),
+              daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'],
+              method = 'pearson',
+              use = 'complete.obs')}
+        
+        summary[n,'nb.weather.stations.used'] <- unique(readRDS(v)[[1]][,'nb_stations_used'])
+        
+        summary[n,'distance_1nearest_station_km'] <- readRDS(v)[['min_dist']]
+        
+        summary[n,'name_1nearest_station'] <- readRDS(v)[['min_dist_name']]
+        
+        summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- cor(as.numeric(as.vector(readRDS(v)[[1]][, 'transformed_u2'])),
+                                                                        as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values'])),
+                                                                        method = 'pearson',
+                                                                        use = 'complete.obs')
+        
+        
+        write.table(readRDS(v)[[1]][,c(i,'dates', 'transformed_u2')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+        
+      }  else{
+        summary[n, "weather.network.used"] <- 'GSOD'
+        summary[n, "Year_Exp"] <- v
+        summary[n, "flagged.NA.percent.growing.season.field.data"] <-
+          sum(is.na(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])) /
+          length(daily_weather[daily_weather$Year_Exp == i,'MEANWINDSPEED'])
+        
+        summary[n, "growing_season_length_(days)"] <-
+          length(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])
+        
+        
+        if (length(which(is.na(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])))>summary[n, "growing_season_length_(days)"]/2){
+          summary[n, "pearson.cor.daily.field.vs.interpolated"] <- NA
+        }
+        
+        else{summary[n, "pearson.cor.daily.field.vs.interpolated"] <-
+          cor(as.numeric(as.vector(readRDS(v)[[1]][, 'transformed_u2'])),
+              daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'],
+              method = 'pearson',
+              use = 'complete.obs')}
+        
+        summary[n,'nb.weather.stations.used'] <- unique(readRDS(v)[[1]][,'nb_stations_used'])
+        
+        summary[n,'distance_1nearest_station_km'] <- readRDS(v)[[5]]
+        
+        summary[n,'name_1nearest_station'] <- readRDS(v)[[4]]
+        
+        summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- cor(as.numeric(as.vector(readRDS(v)[[1]][, 'transformed_u2'])),
+                                                                        as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values'])),
+                                                                        method = 'pearson',
+                                                                        use = 'complete.obs')
+        
+        if(readRDS(v)[['min_dist']]<1.5){
+          df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
+          df<-cbind(i,df[,1],0.748 * df[,2])
+          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          
+        }else{
+          
+          write.table(readRDS(v)[[1]][,c(i,'dates', 'transformed_u2')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+        }
+      }
+    } else {
+      
+      
+      print(paste0(i,': only 1 station'))
+      summary[n, 'interpolation_method'] <- 'only_1_station_available'
+      summary[n, "weather.network.used"] <- 'GSOD'
+      summary[n, "Year_Exp"] <- v
+      summary[n, "flagged.NA.percent.growing.season.field.data"] <-
+        sum(is.na(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])) /
+        length(daily_weather[daily_weather$Year_Exp == i,'MEANWINDSPEED'])
+      
+      summary[n, "growing_season_length_(days)"] <-
+        length(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])
+      
+      
+      summary[n, "pearson.cor.daily.field.vs.interpolated"] <-
+        cor(as.numeric(as.vector(readRDS(paste0(i,'_1station.RDS'))[[1]][, 'transformed_u2'])),
+            daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'],
+            method = 'pearson',
+            use = 'complete.obs')
+      
+      summary[n,'nb.weather.stations.used'] <- 1
+      
+      summary[n,'distance_1nearest_station_km'] <- readRDS(v)[[4]]
+      
+      if (readRDS(v)[[3]]=='72562194063'){summary[n,'name_1nearest_station'] <- 'OGALLALA SEARLE FIELD AIRPORT, NE US'}
+      if (readRDS(v)[[3]]=='72562024023'){summary[n,'name_1nearest_station'] <- 'NORTH PLATTE REGIONAL AIRPORT, NE US'}
+      
+      
+      
+      summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- NA
+      
+      
+      if(readRDS(v)[['min_dist']]<1.5){
+        df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
+        df<-cbind(i,df[,1],0.748 * df[,2])
+        write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+        
+      }else{
+        
+        write.table(readRDS(v)[[1]][,c(i,'dates', 'transformed_u2')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      }
+      
+      
+    }
+    
+    
+    
+    n <- n + 1
+    
+    
+  }
+  
+  
+  
+  write.table(
+    summary,
+    file = paste(
+      "/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/INTERPOLATED_DATA/imputation/",
+      meteo_variable,
+      '_summary.txt',
+      sep = ''
+    ),
+    col.names = T,
+    row.names = F,
+    quote = F,
+    sep = '\t'
+  )
+}
+
+
+
 
