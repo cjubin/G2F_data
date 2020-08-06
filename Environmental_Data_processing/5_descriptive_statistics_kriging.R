@@ -585,10 +585,20 @@ for (meteo_variable in c('WDSP')) {
                                                                         as.numeric(as.vector(readRDS(v)[[1]][, 'nearest_station_values'])),
                                                                         method = 'pearson',
                                                                         use = 'complete.obs')
+        if(readRDS(v)[['min_dist']]<1.5){
+          print(v)
+          df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
+          df<-cbind(i,df[,1],0.748 * df[,2])
+          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          
+        }else{
+          df<-readRDS(v)[[1]][,c('dates', 'transformed_u2')]
+          df<-cbind(i,df)
+          
+          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+        } 
         
-        
-        write.table(readRDS(v)[[1]][,c(i,'dates', 'transformed_u2')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
-        
+       
       }  else{
         summary[n, "weather.network.used"] <- 'GSOD'
         summary[n, "Year_Exp"] <- v
@@ -622,19 +632,23 @@ for (meteo_variable in c('WDSP')) {
                                                                         use = 'complete.obs')
         
         if(readRDS(v)[['min_dist']]<1.5){
+          print(v)
           df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
           df<-cbind(i,df[,1],0.748 * df[,2])
           write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
           
         }else{
+          df<-readRDS(v)[[1]][,c('dates', 'transformed_u2')]
+          df<-cbind(i,df)
           
-          write.table(readRDS(v)[[1]][,c(i,'dates', 'transformed_u2')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+          write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
         }
       }
     } else {
       
       
       print(paste0(i,': only 1 station'))
+      s=
       summary[n, 'interpolation_method'] <- 'only_1_station_available'
       summary[n, "weather.network.used"] <- 'GSOD'
       summary[n, "Year_Exp"] <- v
@@ -645,34 +659,31 @@ for (meteo_variable in c('WDSP')) {
       summary[n, "growing_season_length_(days)"] <-
         length(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'])
       
-      
+      if (!all(is.na(daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED']))){
       summary[n, "pearson.cor.daily.field.vs.interpolated"] <-
         cor(as.numeric(as.vector(readRDS(paste0(i,'_1station.RDS'))[[1]][, 'transformed_u2'])),
             daily_weather[daily_weather$Year_Exp == i, 'MEANWINDSPEED'],
             method = 'pearson',
-            use = 'complete.obs')
+            use = 'complete.obs')}
+      else{summary[n, "pearson.cor.daily.field.vs.interpolated"] <-NA}
       
       summary[n,'nb.weather.stations.used'] <- 1
       
-      summary[n,'distance_1nearest_station_km'] <- readRDS(v)[[4]]
+      summary[n,'distance_1nearest_station_km'] <- readRDS(paste0(i,'_1station.RDS'))[[4]]
       
-      if (readRDS(v)[[3]]=='72562194063'){summary[n,'name_1nearest_station'] <- 'OGALLALA SEARLE FIELD AIRPORT, NE US'}
-      if (readRDS(v)[[3]]=='72562024023'){summary[n,'name_1nearest_station'] <- 'NORTH PLATTE REGIONAL AIRPORT, NE US'}
+      if (readRDS(paste0(i,'_1station.RDS'))[[3]]=='72562194063'){summary[n,'name_1nearest_station'] <- 'OGALLALA SEARLE FIELD AIRPORT, NE US'}
+      if (readRDS(paste0(i,'_1station.RDS'))[[3]]=='72562024023'){summary[n,'name_1nearest_station'] <- 'NORTH PLATTE REGIONAL AIRPORT, NE US'}
       
       
       
       summary[n,'pearson.cor.interpolated.vs.nearby.stations'] <- NA
       
+      df<-readRDS(paste0(i,'_1station.RDS'))[[1]][,c('date', 'transformed_u2')]
+      df<-cbind(i,df)
       
-      if(readRDS(v)[['min_dist']]<1.5){
-        df<-readRDS(v)[[1]][,c('dates', 'nearest_station_values')]
-        df<-cbind(i,df[,1],0.748 * df[,2])
-        write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
-        
-      }else{
-        
-        write.table(readRDS(v)[[1]][,c(i,'dates', 'transformed_u2')],file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
-      }
+      
+      write.table(df,file=paste('selected_model_',s,'.txt',sep=''),col.names = T,row.names = F,sep = '\t',quote=F)
+      
       
       
     }
