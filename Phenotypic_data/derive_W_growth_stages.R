@@ -147,6 +147,8 @@ derive_W_growth_stages=function(version_days=T,use_ref_season_length=T,length_re
     for (s in unique(as.numeric(as.vector(phenos[phenos$Year_Exp==i,'silkdap'])))){
       
       if(is.na(s)){next}
+      
+      
       start=unique(weather[weather$Year_Exp==i,'Date.Planted'])
       end=unique(weather[weather$Year_Exp==i,'Date.Harvested'])
       length_gs=end-start
@@ -154,31 +156,35 @@ derive_W_growth_stages=function(version_days=T,use_ref_season_length=T,length_re
       
       o=start+s
       c=length_gs/length_ref
+      print(c)
       # Flowering time period: 3 weeks in total
       FD1=o-7
       FD2=o+14
       if (use_ref_season_length){PM=round(FD2+60*c)}
       
+      # 3 time periods considered:
+      # 1. From planting time to 1 week before start of silking (start to FD1)
+      # 2. From 1 week before start of silking to 2 weeks after start of silking (FD1 to FD2)
+      # 3. Based on a reference season length (but set as option in the function): about 60 days after end of flowering period (FD2 to PM)
       
       
-      
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$P.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'PRCP2'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$FreqP5.V=length(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'PRCP2']>5))/length(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'PRCP2'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$Wind.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'wind.speed.ms.s'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$MeanT.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMEAN'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$MinT.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMIN'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$MaxT.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMAX'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$GDD.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'GDD'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$FreqMaxT30.V=length(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMAX']>30))/length(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMAX'])
-      #phenos[phenos$Year_Exp==i,]$St32.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1&weather$TMAX>32,'TMAX'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$FreqMaxT35.V=length(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMAX']>35))/length(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'TMAX'])
-      #phenos[phenos$Year_Exp==i,]$St35.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1&weather$TMAX>35,'TMAX'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$EvTot.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'et0'])
-      #phenos[phenos$Year_Exp==i,]$Nb.dry.days.V=sum(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'diff.PminusETP']<0))
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$Photoperiod.hrs.Tot.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'photothermal_time'])
-      #print(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'PRCP2']/weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'et0'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$RatioP.ET0.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'PRCP2'])/sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'et0'])
-      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$Sdrad.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start+7)&weather$Day.of.Year<FD1,'solar_radiation_NASA'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$P.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'PRCP2'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$FreqP5.V=length(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'PRCP2']>5))/length(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'PRCP2'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$Wind.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'wind.speed.ms.s'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$MeanT.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMEAN'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$MinT.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMIN'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$MaxT.V=mean(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMAX'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$GDD.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'GDD'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$FreqMaxT30.V=length(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMAX']>30))/length(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMAX'])
+      #phenos[phenos$Year_Exp==i,]$St32.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1&weather$TMAX>32,'TMAX'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$FreqMaxT35.V=length(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMAX']>35))/length(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'TMAX'])
+      #phenos[phenos$Year_Exp==i,]$St35.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1&weather$TMAX>35,'TMAX'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$EvTot.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'et0'])
+      #phenos[phenos$Year_Exp==i,]$Nb.dry.days.V=sum(which(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'diff.PminusETP']<0))
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$Photoperiod.hrs.Tot.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'photothermal_time'])
+      #print(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'PRCP2']/weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'et0'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$RatioP.ET0.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'PRCP2'])/sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'et0'])
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,]$Sdrad.V=sum(weather[weather$Year_Exp==i&weather$Day.of.Year>=(start)&weather$Day.of.Year<FD1,'solar_radiation_NASA'])
       
       
       
@@ -234,4 +240,3 @@ pheno=derive_W_growth_stages()
 
 setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Growth_stages_intervals")
 write.table(pheno,'phenos_with_EC_covariates.txt',col.names = T,row.names=F,sep="\t",quote = F)
-
