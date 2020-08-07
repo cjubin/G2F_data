@@ -17,7 +17,7 @@
 
 `%notin%` <- Negate(`%in%`)
 
-derive_W_growth_stages=function(version_days=T,use_ref_season_length=T,length_ref=145,version_GDD=F,weather_file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/replaced_daily_weather.txt',pheno_file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/phenotypes_after_processing_only_with_GBS.txt'){
+derive_W_growth_stages=function(version_days=T,use_ref_season_length=F,length_ref=145,version_GDD=F,weather_file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/replaced_daily_weather.txt',pheno_file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/phenotypes_after_processing_only_with_GBS.txt'){
  
   if (version_days){
   weather=read.table(weather_file,header = T,sep = '\t')
@@ -140,6 +140,10 @@ derive_W_growth_stages=function(version_days=T,use_ref_season_length=T,length_re
   phenos$RatioP.ET0.G=NA
   
   
+  phenos$growing_season_length=NA
+  phenos$coeff_ref_length_season=NA
+  
+  
   for (i in unique(phenos$Year_Exp)){
     
     
@@ -152,15 +156,18 @@ derive_W_growth_stages=function(version_days=T,use_ref_season_length=T,length_re
       start=unique(weather[weather$Year_Exp==i,'Date.Planted'])
       end=unique(weather[weather$Year_Exp==i,'Date.Harvested'])
       length_gs=end-start
-      print(length_gs)
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,'growing_season_length']<-length_gs
       
       o=start+s
       c=length_gs/length_ref
+      phenos[phenos$Year_Exp==i&phenos$silkdap==s,'coeff_ref_length_season']<-c
       print(c)
       # Flowering time period: 3 weeks in total
       FD1=o-7
       FD2=o+14
-      if (use_ref_season_length){PM=round(FD2+60*c)}
+      # Grain filling time lasts about 60 days for 140 days growing season reference length
+      if (use_ref_season_length){PM=FD2+ceiling(60*c)}
+      else{PM=FD2+60}
       
       # 3 time periods considered:
       # 1. From planting time to 1 week before start of silking (start to FD1)
@@ -240,3 +247,4 @@ pheno=derive_W_growth_stages()
 
 setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Growth_stages_intervals")
 write.table(pheno,'phenos_with_EC_covariates.txt',col.names = T,row.names=F,sep="\t",quote = F)
+
