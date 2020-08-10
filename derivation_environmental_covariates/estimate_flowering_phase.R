@@ -18,6 +18,8 @@
 #' @param GDD_place_to_predict data.frame with colnames 'Date' and 'GDU'. 
 #' The data.frame containsin first column all dates from Planting to Harvest dates corresponding to the place to predict.
 #' Second column contains the cooresponding cumulative GDUs (real weather data from the concerned place).
+#' 
+
 #' Estimation of the end of the flowering phase --> 280 GDUs after beginning of silking (R1 + R2 corn reproductive growth stages)
 #'  
 #'  
