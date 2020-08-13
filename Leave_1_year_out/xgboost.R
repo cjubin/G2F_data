@@ -1,14 +1,16 @@
 #######################
 #######################
 args = commandArgs(trailingOnly = TRUE)
-x0 = args[1]
-x1 = args[2]
-x2 = args[3]
-x3 = args[4]
-x4 = args[5]
-x5 = args[6]
-x6 = args[7]
-x7 = args[8]
+x1 = args[1]
+x2 = args[2]
+x3 = args[3]
+x4 = args[4]
+x5 = args[5]
+x6 = args[6]
+x7 = args[7]
+x8 = args[8]
+x9 = args[9]
+
 ##
 
 
@@ -16,6 +18,7 @@ x7 = args[8]
 
 xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
                                    phenos_file,
+                                   geno_file,
                                    seed = 105,
                                    nbootstrap = 100,
                                    year_to_predict,
@@ -34,28 +37,35 @@ xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
                                    bootstrap_sampling = c('total_random', 'yearly_based')) {
   library(caret)
   library(doParallel)
-  source('setSeeds.R')
+  library(data.table)
+  library(xgboost)
+  source('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/setSeeds.R')
   `%notin%` <- Negate(`%in%`)
   
   
-  ###First step: pre-processing the data and split the data according to the year to predict
-  ##Load dataset with all observations with environmental and genomic predictors
+  ### First step: pre-processing the data and split the data according to the year to predict
+  ### Load dataset with all observations with environmental and genomic predictors
   
-  phenos = read.table(
-    phenos_file,
-    header = T,
-    sep = '\t'
-  )
+  phenos = read.table(phenos_file,header = T,sep = '\t')
+  phenos<-phenos[,-which(colnames(phenos)%in%c("parent1","parent2","parent1.GBS.sample","parent2.GBS.sample"))]
+  
+  geno_hybrids=fread(geno_file)
+  geno_hybrids=as.data.frame(geno_hybrids)
+  geno_hybrids<-geno_hybrids[,-which(colnames(geno_hybrids)%in%c("parent1","parent2","parent1.GBS.sample","parent2.GBS.sample"))]
+  print('Data read')
+  
+  colnames(geno_hybrids)[2:ncol(geno_hybrids)]<-paste0('SNP',colnames(geno_hybrids)[2:ncol(geno_hybrids)])
+  phenos=merge(phenos,geno_hybrids,by='pedigree',all.x = T)
+  
   
   
   phenos$Year = as.factor(phenos$year)
-  phenos=phenos[,-which(colnames(phenos)=='year')]
   
   ##Predictors variables included for prediction according to the sets of predictors defined by the user.
   toMatch = c('.V', '.F', '.G', 'length.growing.season')
   toMatch2 = c('SNP', 'UD')
-  toMatch3 = c('Year')
-  toMatch4 = c('counties', 'city')
+  toMatch3 = c('year')
+  toMatch4 = c('counties')
   toMatch5 = c('.SC')
   matches1 <-
     grep(paste(toMatch, collapse = "|"), colnames(phenos), value = TRUE)
@@ -114,7 +124,14 @@ xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
   unique_loc=gsub('-','.',unique_loc)  
   
   #Conversion of factor or character variables to dummy variables
+  print(colnames(phenos2))
   
+  if (sets_predictors%in%c('WC+SC+Y+L',
+      'Y+L',
+      'G+Y+L',
+      'G+WC+SC+Y+L',
+      'G+Y',
+      'G+L')){
   converted_dummies <-
     data.frame(predict(caret::dummyVars(~ ., data = phenos2), newdata =
                          phenos2))
@@ -124,16 +141,25 @@ xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
   training_set_year = year[year %notin% year_to_predict]
   row.names(training_set_year) = NULL
   
-  test = converted_dummies [which(year==year_to_predict),]
+  test = converted_dummies [which(year==year_to_predict),]}
   
   #Pre-processing
+  training =phenos2[-which(year==year_to_predict),]
+  training_set_year = year[year %notin% year_to_predict]
+  row.names(training_set_year) = NULL
+  
+  test = phenos2[which(year==year_to_predict),]
+  
+  df1<-data.matrix(training[, -which(colnames(training) %in% c(trait,unique_years,unique_loc))])
+  df2<-data.matrix(test[, -which(colnames(test) %in% c(trait,unique_years,unique_loc))])
+  
   preProcValues <-
-    caret::preProcess(training[, -which(colnames(training) %in% c(trait,unique_years,unique_loc))], method = c("center", "scale"))
+    caret::preProcess(df1, method = c("center", "scale"))
   
   trainTransformed <-
-    predict(preProcValues, training[, -which(colnames(training) %in% c(trait,unique_years,unique_loc))])
+    predict(preProcValues, df1)
   testTransformed <-
-    predict(preProcValues, test[, -which(colnames(test) %in% c(trait,unique_years,unique_loc))])
+    predict(preProcValues, df2)
   
   if (sets_predictors %in% c('WC+SC+Y+L', 'Y+L', 'G+Y+L', 'G+WC+SC+Y+L')) {
     trainTransformed <-
@@ -157,6 +183,10 @@ xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
     trainTransformed <-
       as.data.frame(cbind(training[, c(trait)], trainTransformed))
     colnames(trainTransformed)[1] = trait
+    print(trainTransformed[,trait])
+    print(class(trainTransformed))
+    print(which(is.na(trainTransformed[,trait])))
+    print(which(is.na(trainTransformed), arr.ind=TRUE))
     testTransformed <-
       as.data.frame(cbind(test[, c(trait)], testTransformed))
   }
@@ -238,7 +268,7 @@ xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
         tuneGrid = tune_grid,
         trControl = fitControl,
         verbose = TRUE,
-        num.threads = cores - 1
+        num.threads = cores 
       )
     
     print('Hyperparameter optimization done.')
@@ -487,7 +517,8 @@ xgboost_year_prediction = function(geno_info = c('snps', 'PCs'),
 }
 
 xgboost_year_prediction(
-  phenos_file=as.character(x0),
+  phenos_file=as.character(x8),
+  geno_file=as.character(x9),
   nbootstrap = as.numeric(x1),
   year_to_predict = x2,
   trait = as.character(x3),
