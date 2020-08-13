@@ -58,7 +58,7 @@ cfgs <-
       partitional = partitional_control(iter.max = 30L,
                                         nrep = 1L),
     hierarchical = hierarchical_control(method = "all"),
-    preprocs = pdc_configs("zscore"),
+    preprocs = pdc_configs("zscore")
       
     )
   )
