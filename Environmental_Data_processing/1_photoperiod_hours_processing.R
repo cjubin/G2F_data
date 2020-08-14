@@ -2,31 +2,30 @@ rm(list = ls())
 # ------------------------------------------------------------------------------
 #Load packages
 # ------------------------------------------------------------------------------
-library(rnoaa)
-library(GSODR)
-library(gstat)
-library(Rcpp)
-library(raster)
-library(sp)
-library(mapdata)
-library(maps)
-library(maptools)
-library(xts)
-library(spacetime)
-library(rgdal)
+
+
+packages = c("xts","data.table","rgdal","readxl","opencage","intrval","dplyr","USAboundaries","ggplot2","rnoaa","stringr","ggmap","revgeo","lubridate")
+
+## Load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
 
 `%notin%` <- Negate(`%in%`)
 
 
-library(dplyr)
-library(plyr)
-library(lubridate)
 
 # ------------------------------------------------------------------------------
 # Load datasets
 # ------------------------------------------------------------------------------
 weather = read.table(
-  'weather_semihourly.txt',
+  '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/weather_intermediate.txt',
   header = T,
   sep = '\t',
   na.strings = c(NA, ''),
@@ -36,7 +35,7 @@ weather = read.table(
 )
 
 daily_weather = read.table(
-  'daily_weather.txt',
+  '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/daily_weather_afterstep0.txt',
   header = T,
   sep = '\t',
   na.strings = c(NA, ''),
@@ -44,6 +43,7 @@ daily_weather = read.table(
   comment.char = "#",
   stringsAsFactors = F
 )
+
 
 
 # ------------------------------------------------------------------------------
