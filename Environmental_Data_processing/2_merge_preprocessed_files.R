@@ -1,15 +1,15 @@
 # ------------------------------------------------------------------------------
 # Merge all the pre-processed steps (step1) realized on the different meteorological variables
 # ------------------------------------------------------------------------------
-
+rm(list = ls())
 # ------------------------------------------------------------------------------
 # Run and load all datasets
 # ------------------------------------------------------------------------------
-
+setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing")
 
 #Temperature pre-processed
 
-# Be sure that the last versions of the datasets have been written
+# Load the processed datasets according to each variable (range, persistency tests differing according to the weather variable)
 source('1_photoperiod_hours_processing.R')
 source('1_incomingsolar_radiation_processing.R')
 source('1_wind_processing.R')
@@ -77,14 +77,17 @@ temp =
   stringsAsFactors = F
 )
 
-list1=list(temp,radiation,daylength,humidity,prcp,wind)
+list1=list(daylength,prcp,humidity,wind,radiation,temp)
 multi_full <- Reduce(
   function(x, y, ...) merge(x, y, all = TRUE, ...),
   list1
 )
-dat=multi_full[,-which(colnames(multi_full)%in%c("flagged_rain","flagged_temp","flagged_WIND","flagged_solarrad","incoming_radiation","flagged_humidity"))]
+tmp=grep('flagged',colnames(multi_full))
+multi_full=multi_full[,-tmp]
+dat<-multi_full
 
 colnames(dat)[which(colnames(dat)=='sum_rainfall')]<-'PRCP'
+
 # ------------------------------------------------------------------------------
 # Add saturation vapor pressure (es, kPa) and actual vapor pressure (ea, kPa)
 # saturation vapor pressure deficit es-ea, kPa
@@ -95,28 +98,10 @@ dat$es=get.es(tmin = dat$TMIN,tmax = dat$TMAX)
 dat$vpd=dat$es-dat$ea
 dat=arrange(dat,Year_Exp,Day.of.Year)
 
-write.table(dat,file='2_merged_dataset.txt',col.names = T,row.names = F,sep = '\t',quote = F)
-
-# ------------------------------------------------------------------------------
-# Coordinates MNH1_2017 to change
-# ------------------------------------------------------------------------------
-dat[dat$Year_Exp == '2017_MNH1', 'lat'] <-
-  44.06981
-dat[dat$Year_Exp == '2017_MNH1', 'long'] <-
-  -93.5338
+write.table(dat,file='2_merged_dataset_before_interpolation.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
 
-# ------------------------------------------------------------------------------
-# Add elevation
-# ------------------------------------------------------------------------------
-
-library(elevatr)
-loc=unique(dat[,c('long','lat')])
-elev<-get_elev_point(locations=loc,units='meters',prj = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
-elev_df=cbind(loc,elev@data)
-dat$elev=elev_df[match(dat$lat,elev_df$lat),'elevation']
-dat=arrange(dat,Year_Exp,Day.of.Year)
-write.table(dat,file='2_merged_dataset_with_elevation.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
 
+  
 
