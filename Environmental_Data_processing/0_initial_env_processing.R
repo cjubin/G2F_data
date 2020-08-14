@@ -17,6 +17,20 @@ library(ggmap)
 library(revgeo)
 library(lubridate)
 library(tidyverse)
+
+packages = c("tidyverse", "elevatr","rgdal","readxl","opencage","intrval","plyr","dplyr","USAboundaries","ggplot2","rnoaa","stringr","ggmap","revgeo","lubridate")
+
+## Load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
 setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing")
 `%notin%` <- Negate(`%in%`)
 
@@ -279,7 +293,7 @@ geo_data_fields[!is.na(geo_data_fields$X..Sand),'imputed']='NO'
 
 
 ######VERY CLOSE COORDINATES --> SAME SOIL COMPOSITION ASSUMED######
-geo_data_fields[geo_data_fields$Year_Exp=='2014_TXH1',c('X..Sand','X..Silt','X..Clay')]=c(11,30,59)
+geo_data_fields[geo_data_fields$Year_Exp=='2014_TXH1',c('X..Sand','X..Silt','X..Clay','OM')]=c(11,30,59,1.75)
 
 geo_data_fields[geo_data_fields$Year_Exp=='2015_ONH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]=geo_data_fields[geo_data_fields$Year_Exp=='2016_ONH1',c('X..Sand','X..Silt','X..Clay','Texture','OM')]
 geo_data_fields[geo_data_fields$Year_Exp=='2015_ONH1','imputed']='close_location_other_years'
@@ -423,16 +437,26 @@ weather_all$Year_Exp=paste0(weather_all$Year,'_',weather_all$Field.Location)
 weather=weather_all[weather_all$Year_Exp%in%geo_data_fields$Year_Exp,]
 
 
-## Add same weather_all data for 2016_NYH2 and 2016_NYH3, and for 2017_NYH2 and 2017_NYH3
-to_add1<-weather_all[weather_all$Year_Exp=='2016_NYH2',]
+## Add same weather data for 2016_NYH2 and 2016_NYH3, and for 2017_NYH2 and 2017_NYH3
+to_add1<-weather[which(weather$Year_Exp=='2016_NYH2'),]
 to_add1$Year_Exp<-'2016_NYH3'
 to_add1$Field.Location<-'NYH3'
-weather_all<-rbind(weather_all,to_add1)
+weather<-rbind(weather,to_add1)
 
-to_add2<-weather_all[weather_all$Year_Exp=='2017_NYH2',]
+to_add2<-weather[which(weather$Year_Exp=='2017_NYH2'),]
 to_add2$Year_Exp<-'2017_NYH3'
 to_add2$Field.Location<-'NYH3'
-weather_all<-rbind(weather_all,to_add2)
+weather<-rbind(weather,to_add2)
+
+#2017_NEH3 and 2017_NEH4: same place but weather data present more missing values for station in 2017_NEH4
+to_del<-weather[-which(weather$Year_Exp=='2017_NEH4'),]
+weather<-to_del
+
+to_add2<-weather[which(weather$Year_Exp=='2017_NEH3'),]
+to_add2$Year_Exp<-'2017_NEH4'
+to_add2$Field.Location<-'NEH4'
+weather<-rbind(weather,to_add2)
+
 
 
 ## Order weather data frame
