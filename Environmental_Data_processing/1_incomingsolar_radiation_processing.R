@@ -174,3 +174,4 @@ daily_weather%>%
 #Write the table which will be used for comparison with interpolated values for non missing values
 write.table(daily_weather,'daily_weather_solarrad_processed1.txt',col.names=T,row.names=F,sep='\t',quote=F)
 
+
