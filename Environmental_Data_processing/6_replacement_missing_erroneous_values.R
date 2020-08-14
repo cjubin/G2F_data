@@ -80,6 +80,30 @@ for (i in set_locations) {
   
 }
 
+
+##Some residual NA
+
+
+ds <-
+  split(daily_weather, daily_weather$Year_Exp)
+for (i in 1:length(ds)) {
+  name = names(ds[[i]])
+  ind <- which(is.na(ds[[i]])[, "solar_radiation_NASA"])
+  if (length(ind) != 0) {
+    for (s in ind) {
+      ds[[i]][s, "solar_radiation_NASA"] <-
+        ds[[i]][s + 1, "solar_radiation_NASA"]
+    }
+  }
+}
+
+daily_weather<-bind_rows(ds, .id = "column_label")
+  
+
+
+
+
+
 print('Total replacement solar irradiance values done')
 # ------------------------------------------------------------------------------
 # Replacement Precipitation
@@ -426,7 +450,9 @@ setwd(
   "/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing"
 )
 source('vapor_pressure.R')
-
+indx<-which(is.na(daily_weather$HMEAN))
+print(unique(daily_weather[indx,'Year_Exp']))
+daily_weather$HMEAN[indx]=(daily_weather$HMIN[indx]+daily_weather$HMAX[indx])/2
 daily_weather$ea = get.ea(
   rhmin = daily_weather$HMIN,
   rhmax = daily_weather$HMAX,
@@ -477,7 +503,45 @@ for (i in set_locations) {
   
 }
 
+# ------------------------------------------------------------------------------
+# Manually add environments with same weather data used (same location) but distinguished due to different Plating Date or irrigated/not irrigated.
+# ------------------------------------------------------------------------------
+daily_weather$Year_Exp=as.character(as.vector(daily_weather$Year_Exp))
 
+
+add1<-daily_weather[which(daily_weather$Year_Exp=='2016_ILH1'),]
+add1$Year_Exp='2016_ILH1.b'
+add1$Date.Planted=117
+daily_weather[daily_weather$Year_Exp=='2016_ILH1','Year_Exp']<-'2016_ILH1.a'
+daily_weather[which(daily_weather$Year_Exp=='2016_ILH1.a'),'Date.Planted']<-127
+
+add2<-daily_weather[which(daily_weather$Year_Exp=='2017_TXH1'),]
+add2$Year_Exp='2017_TXH1-Dry'
+add2$Date.Planted=62
+add2$Date.Harvested=206
+add3<-daily_weather[which(daily_weather$Year_Exp=='2017_TXH1'),]
+add3$Year_Exp='2017_TXH1-Early'
+add3$Date.Planted=62
+add3$Date.Harvested=212
+
+daily_weather[daily_weather$Year_Exp=='2017_TXH1','Year_Exp']<-'2017_TXH1-Late'
+daily_weather[which(daily_weather$Year_Exp=='2016_ILH1.a'),'Date.Planted']<-96
+daily_weather[which(daily_weather$Year_Exp=='2016_ILH1.a'),'Date.Harvested']<-222
+
+
+add4<-daily_weather[which(daily_weather$Year_Exp=='2018_KSH1'),]
+add4$Year_Exp='2018_KSH1.drought'
+daily_weather[daily_weather$Year_Exp=='2018_KSH1','Year_Exp']<-'2018_KSH1.irrigated'
+
+daily_weather=rbind(daily_weather,add1,add2,add3,add4)
+
+
+
+daily_weather[daily_weather$Year_Exp=='2018_TXH1- Dry','Year_Exp']<-'2018_TXH1-Dry'
+daily_weather[daily_weather$Year_Exp=='2018_TXH1- Early','Year_Exp']<-'2018_TXH1-Early'
+daily_weather[daily_weather$Year_Exp=='2018_TXH1- Late','Year_Exp']<-'2018_TXH1-Late'
+
+daily_weather = plyr::arrange(daily_weather, Year_Exp, Day.of.Year)
 # ------------------------------------------------------------------------------
 # Manually add irrigation values
 # ------------------------------------------------------------------------------
@@ -530,6 +594,14 @@ daily_weather$et0 = evapotranspiration(
 daily_weather$etp_initial = 0.3 * daily_weather$et0
 daily_weather$etp_midseason = 1.2 * daily_weather$et0
 daily_weather$etp_late = 0.5 * daily_weather$et0
+
+daily_weather$daily_diffPrec_ETP.V=daily_weather$PRCP2-daily_weather$etp_initial
+daily_weather$daily_diffPrec_ETP.F=daily_weather$PRCP2-daily_weather$etp_midseason
+daily_weather$daily_diffPrec_ETP.G=daily_weather$PRCP2-daily_weather$etp_late
+daily_weather$daily_diffPrec_ET0=daily_weather$PRCP2-daily_weather$et0
+
+print(length(which(is.na(daily_weather$et0))))
+
 
 write.table(
   daily_weather,
