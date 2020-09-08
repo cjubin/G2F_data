@@ -1,0 +1,687 @@
+---
+title: "XGBOOST_100CV_Heslotscheme"
+author: "Cathy Jubin"
+date: "9/1/2020"
+output: html_document
+description: XGBOOST model, using tidymodels.
+params:
+  seed:
+    value: 105
+  geno_info:
+    value: 'PCs'
+  phenos_file:
+    value: '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/split_tr_test_20%.RDS'
+  geno_file: '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/geno_hybrids.txt'
+  id_split: 
+    value: 5
+  trait:
+    value: 'yld_bu_ac'
+  sets_predictors:
+    value: 'G+Y+Lon+Lat'
+    choices: ['G','WC+SC','WC+SC+Y+L','Y+L','G+WC+SC','G+Y+L','G+WC+SC+Y+L','G+Y','G+L','G+WC','G+SC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+Y+Lon+Lat']
+  method: 
+    value: 'xgboost'
+  tuning_hyper_parameters: 
+    value: '4-fold-CV-year'
+    choices: ['4-fold-CV-year', 'random-CV']
+  WC_features_removed:
+    value: TRUE
+
+    
+  
+---
+
+
+
+
+#### Arguments passed to the function
+
+```{r,echo=FALSE}
+print(params)
+```
+
+
+
+
+#### Packages to load
+```{r,echo=FALSE,include=FALSE}
+myPaths <-
+  c(
+    "/usr/users/jubin1/.conda/envs/rmarkdown/lib/R/library",
+    "/home/uni08/jubin1/R/x86_64-redhat-linux-gnu-library/3.6",
+    "/usr/lib64/R/library",
+    "/usr/share/R/library"
+  )
+.libPaths(myPaths)
+
+
+source(
+  '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/setSeeds.R'
+)
+`%notin%` <- Negate(`%in%`)
+  
+```
+  
+```{r}
+library(furrr)
+library(data.table)
+library(tidymodels)
+library(vip)
+library(tidyverse)
+library(doFuture)
+library(gridExtra)
+library(future)
+library(xgboost)
+library(doParallel)
+```
+
+### The procedure used here is inspired from the one used in Heslot et al. 2014. 
+### Two sets of environments (Year x Location combinations) are generated and used as training/training sets in the proportions (2/3 training and 1/3 test)
+
+
+#I. Example illustrated for one split training/test set according to the previously described procedure. 
+
+#### First step: load dataset with all observations, including environmental and genomic predictors
+#### Pre-processing the data according to the set of predictors chosen (sets_predictors) and split the data according to the year to predict (year_to_predict)
+  
+```{r, include=FALSE,echo=FALSE} 
+phenos = readRDS(params$phenos_file)
+phenos = phenos[[params$id_split]]
+training = phenos[[1]]
+test = phenos[[2]]
+
+
+
+test$P.Total=test$P.V+test$P.F+test$P.G
+training$P.Total=training$P.V+training$P.F+training$P.G
+
+training <-
+  training[,-which(
+    colnames(training) %in% c(
+      "parent1",
+      "parent2",
+      "parent1.GBS.sample",
+      "parent2.GBS.sample"
+    )
+  )]
+test <-
+  test[,-which(
+    colnames(test) %in% c(
+      "parent1",
+      "parent2",
+      "parent1.GBS.sample",
+      "parent2.GBS.sample"
+    )
+  )]
+
+geno_hybrids = fread(params$geno_file)
+geno_hybrids = as.data.frame(geno_hybrids)
+
+geno_hybrids <-
+  geno_hybrids[,-which(
+    colnames(geno_hybrids) %in% c(
+      "parent1",
+      "parent2",
+      "parent1.GBS.sample",
+      "parent2.GBS.sample"
+    )
+  )]
+
+print('Data read')
+
+colnames(geno_hybrids)[2:ncol(geno_hybrids)] <-
+  paste0('SNP', colnames(geno_hybrids)[2:ncol(geno_hybrids)])
+
+
+
+# Registering  available for parallel processing
+# Registering cores available for parallel processing
+
+cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
+registerDoFuture()
+cl <- makeCluster(cores)
+plan(cluster, workers = cl)
+
+if (params$geno_info == 'PCs') {
+  rec1 <- recipe(pedigree ~ . ,
+                 data = geno_hybrids) %>%
+    step_pca(starts_with('SNP'), threshold = .95)
+  pc_reduction <- prep(rec1, training = geno_hybrids)
+  geno_pcs <- juice(pc_reduction)
+  training = merge(training, geno_pcs, by = 'pedigree', all.x = T)
+  test = merge(test, geno_pcs, by = 'pedigree', all.x = T)
+} else{
+  training = merge(training, geno_hybrids, by = 'pedigree', all.x = T)
+  test = merge(test, geno_hybrids, by = 'pedigree', all.x = T)
+}
+
+print('PCA achieved')
+plan(sequential) # closing cluster session
+
+## Conversion to factors
+training$year = as.factor(training$year)
+training$counties = as.factor(training$counties)
+test$year = as.factor(test$year)
+test$counties = as.factor(test$counties)
+
+## Conversion to numeric
+if (!is.numeric(training$Latitude) |
+    !is.numeric(training$Longitude) |
+    !is.numeric(test$Latitude) | !is.numeric(test$Latitude)) {
+  training$Latitude = as.numeric(as.vector(training$Latitude))
+  training$Latitude = as.numeric(as.vector(training$Longitude))
+  test$Latitude = as.numeric(as.vector(test$Latitude))
+  test$Longitude = as.numeric(as.vector(test$Longitude))
+}
+
+## Predictors variables included for prediction according to the sets of predictors defined by the user.
+toMatch = c('.Total','.V', '.F', '.G', 'length.growing.season')
+if (params$geno_info == 'PCs')
+{
+  toMatch2 = 'PC'
+}else{
+  toMatch2 = 'SNP'
+}
+
+toMatch3 = c('year')
+toMatch4 = c('counties')
+toMatch5 = c('.SC')
+toMatch6=c('Year_Exp')
+toMatch7=c('Longitude')
+toMatch8=c('Latitude')
+matches1 <-
+  grep(paste(toMatch, collapse = "|"), colnames(training), value = TRUE)
+matches2 <-
+  grep(paste(toMatch2, collapse = "|"), colnames(training), value = TRUE)
+matches3 <-
+  grep(paste(toMatch3, collapse = "|"), colnames(training), value = TRUE)
+matches4 <-
+  grep(paste(toMatch4, collapse = "|"), colnames(training), value = TRUE)
+matches5 <-
+  grep(paste(toMatch5, collapse = "|"), colnames(training), value = TRUE)
+matches6 <-
+  grep(paste(toMatch6, collapse = "|"), colnames(training), value = TRUE)
+matches7 <-
+  grep(paste(toMatch7, collapse = "|"), colnames(training), value = TRUE)
+matches8 <-
+  grep(paste(toMatch8, collapse = "|"), colnames(training), value = TRUE)
+
+
+if (params$sets_predictors == 'WC+SC') {
+  predictors = c(matches1, matches5, matches3,matches6)
+}
+if (params$sets_predictors == 'G') {
+  predictors = c(matches2, matches3,matches6)
+}
+if (params$sets_predictors == 'Y+L') {
+  predictors = c(matches3, matches4,matches6)
+}
+if (params$sets_predictors == 'G+WC') {
+  predictors = c(matches1, matches2, matches3,matches6)
+}
+if (params$sets_predictors == 'G+SC') {
+  predictors = c(matches2, matches5, matches3,matches6)
+}
+if (params$sets_predictors == 'WC+SC+Y+L') {
+  predictors = c(matches1, matches3, matches4, matches5,matches6)
+}
+if (params$sets_predictors == 'G+WC+SC') {
+  predictors = c(matches1, matches2, matches5, matches3,matches6)
+}
+if (params$sets_predictors == 'G+Y+L') {
+  predictors = c(matches2, matches3, matches4,matches6)
+}
+if (params$sets_predictors == 'G+WC+SC+Y+L') {
+  predictors = c(matches1, matches2, matches3, matches4, matches5,matches6)
+}
+if (params$sets_predictors == 'G+Y') {
+  predictors = c(matches2, matches3,matches6)
+}
+if (params$sets_predictors == 'G+L') {
+  predictors = c(matches2, matches4, matches3,matches6)
+}
+if (params$sets_predictors == 'G+WC+SC+Lon+Lat') {
+  predictors = c(matches1,matches2,matches3, matches5,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+WC+Lon+Lat') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Y+Lon+Lat') {
+  predictors = c(matches2, matches3, matches6,matches6,matches7,matches8)
+}
+
+#Selecting the variables based on the list of predictors defined previously
+#Create dummy variables if factor variables are present
+training = training[, colnames(training) %in% c(predictors, params$trait)]
+test= test[, colnames(test) %in% c(predictors, params$trait)]
+
+
+#Excluding some weather covariates if WC_feature_selection TRUE
+if (params$WC_features_removed==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC')){
+  to_exclude=c('FreqP5.V','FreqP5.F','FreqP5.G','FreqP5.V', "SumDiffP_ETP.V", "SumDiffP_ETP.F", "SumDiffP_ETP.G")
+  training = training[, colnames(training) %notin% c(to_exclude)]
+  test= test[, colnames(test) %notin% c(to_exclude)]
+
+}
+
+
+
+if (params$sets_predictors %in% c('G',
+                           'WC+SC',
+                           'G+WC+SC','G+WC+SC+Lon+Lat','G+WC+Lon+Lat')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(-yld_bu_ac, -year, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes())
+} else if (params$sets_predictors %in% c('G+L')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(-yld_bu_ac, -year, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(counties) 
+    
+} else if (params$sets_predictors %in% c('G+Y')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year)
+} else if (params$sets_predictors %in% c('G+Y+Lon+Lat')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year)
+} else if (params$sets_predictors %in% c('G+WC')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes())
+} else if (params$sets_predictors %in% c('G+SC')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes())
+} else if (params$sets_predictors %in% c('G+Y+L','G+WC+Y+L','G+WC+SC+Y+L')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year,preserve = T) %>%
+    step_dummy(counties,preserve = F) 
+} else {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(all_nominal()) 
+}
+
+
+```
+
+#### Variables assigned to outcome and predictors using function recipe (tidymodels)
+
+```{r, echo=FALSE} 
+print(rec)
+
+norm_obj <- prep(rec, training = training)
+
+transformed_te <- bake(norm_obj, test)
+
+transformed_tr <- juice(norm_obj)
+print('Number of columns after data pre-processing:')
+print(ncol(transformed_tr))
+print('Name columns after data pre-processing:')
+print(colnames(transformed_tr))
+
+
+print('Data prepared for hyperparameter optimization - First step')
+```
+
+#### Second step: hyperparameter optimization according to the option set in tuning_hyper_parameters
+
+```{r, echo=FALSE,include=FALSE} 
+
+
+xgboost_model <-
+  parsnip::boost_tree(
+    mode = "regression",
+    trees = tune(),
+    min_n = tune(),
+    tree_depth = tune(),
+    learn_rate = tune()
+  ) %>%
+  set_engine("xgboost", objective = "reg:linear") %>%
+  translate()
+
+
+
+```
+##### Grid range for various parameters
+```{r, echo=FALSE}
+xgb_grid <- expand.grid(
+  trees = c(300, 500, 750, 1000, 1500,2000),
+  min_n = c(7, 10, 20, 30),
+  tree_depth = c(3,5, 6, 10),
+  learn_rate = c(0.001, 0.005, 0.01, 0.05)
+)
+xgb_grid
+```  
+
+  
+##### Hyperparameter tuning ('tuning_hyper_parameters' param): two methods possible:
+##### 1: cv using  4 folds within the training set and using two repeats, each fold stratified according to the column year: '4-fold-CV-year'
+##### 2: cv using 4 folds and two repeats (without stratification by year): 'random-CV'
+```{r, echo=FALSE}
+print('Starting hyperparameter optimization')
+if (params$sets_predictors %in% c('G',
+                                  'WC+SC',
+                                  'G+WC+SC','G+WC+SC+Lon+Lat','G+WC+Lon+Lat')) {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . - year - Year_Exp)
+  
+} else if (params$sets_predictors %in% c('G+L')) {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+WC')) {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+SC')) {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+Y+L')) {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+Y','G+Y+Lon+Lat','G+WC+Y+L','G+WC+SC+Y+L')) {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . -Year_Exp)
+  
+  
+} else {
+  wf <- workflow() %>%
+    add_model(xgboost_model) %>%
+    add_formula(yld_bu_ac ~ . -Year_Exp)
+  
+}
+
+cores <- as.integer(Sys.getenv('SLURM_NTASKS'))
+registerDoFuture()
+cl <- makeCluster(cores)
+
+plan(cluster, workers = cl)
+
+
+if (params$tuning_hyper_parameters == '4-fold-CV-year') {
+  folds <- vfold_cv(transformed_tr,
+                    strata = 'year',
+                    repeats = 2,
+                    v = 4)
+  
+  
+  opt_res <- wf %>%
+    tune_grid(
+      resamples = folds,
+      grid = xgb_grid,
+      metrics = yardstick::metric_set(rmse,rsq,mae),
+      control = tune::control_grid(verbose = TRUE)
+    )
+  
+  print(opt_res)
+  
+}
+
+if (params$tuning_hyper_parameters == 'random-CV') {
+  folds <- vfold_cv(transformed_tr, repeats = 2, v = 4)
+  
+  opt_res <- wf %>%
+    tune_grid(
+      resamples = folds,
+      grid = xgb_grid,
+      metrics = yardstick::metric_set(rmse,rsq, mae),
+      control = tune::control_grid(verbose = TRUE)
+    )
+  print(opt_res)
+  
+}
+
+
+plan(sequential) # closing cluster session
+
+print('Hyperparameter optimization done.')
+
+```
+### Plots resulting from hyperparameter optimization on the training set using 4-folds CV:
+```{r,echo=FALSE}
+autoplot(opt_res)
+```
+### Collected metrics from tune grid results
+```{r,echo=FALSE}
+
+opt_res %>% 
+  collect_metrics()
+
+```
+
+### Extract the best hyperparameters for fitting on bootstrap samples in the next step.
+```{r,echo=FALSE}
+xgboost_best_params <- opt_res %>%
+  tune::select_best("rmse",maximize=FALSE)->highest_score
+
+xgboost_best_params
+
+xgboost_model_final <- finalize_workflow(
+  wf,
+  xgboost_best_params
+)
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    'results_index/best_hyperparameters_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(opt_res, file = output_file)
+  
+```
+
+
+\newline
+\newline
+\newline
+\newline
+
+#### Prediction using the best model both on training and test sets
+  
+```{r,echo=FALSE,include=FALSE}
+
+final_xgboost <- 
+  xgboost_model_final %>%
+  fit(data = transformed_tr) 
+
+
+## Across Environments
+
+m <- final_xgboost %>% predict(new_data = transformed_tr)  %>%
+    bind_cols(transformed_tr) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m1 <- final_xgboost %>% predict(new_data = transformed_tr) %>%
+    bind_cols(transformed_tr) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+
+m2 <- final_xgboost %>% predict(new_data = transformed_te)  %>%
+    bind_cols(transformed_te) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m3 <- final_xgboost %>% predict(new_data = transformed_te) %>%
+    bind_cols(transformed_te) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+  
+## By Environment
+
+s <- final_xgboost %>% predict(new_data = transformed_tr)  %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s$.estimate=as.numeric(s$.estimate)
+s_mean <- s %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s_mean <- unique(s_mean[,c(2,5,6)])
+
+s1 <- final_xgboost %>% predict(new_data = transformed_tr) %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s1_mean<-mean(s1$COR)
+s1_sd<-sd(s1$COR)
+
+s2 <- final_xgboost %>% predict(new_data = transformed_te)  %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s2$.estimate=as.numeric(s2$.estimate)
+s2_mean <- s2 %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s2_mean <- unique(s2_mean[,c(2,5,6)])
+
+s3 <- final_xgboost %>% predict(new_data = transformed_te) %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s3_mean<-mean(s3$COR)
+s3_sd<-sd(s3$COR)
+
+
+
+varimps <- xgb.importance(model=pull_workflow_fit(final_xgboost)$fit)
+
+ 
+  
+
+
+final_object <-
+  list(m,m1,m2,m3,varimps,s,s1,s2,s3,s_mean,s1_mean,s1_sd,s2_mean,s3_mean,s3_sd)
+
+
+names(final_object)<-c('tr_metrics_across_all','tr_corr_across_all','te_metrics_across_all','te_corr_across_all',varimps,'tr_metrics_by_yearexp','tr_corr_by_yearexp','te_metrics_by_yearexp','te_corr_by_yearexp','tr_mean_sd_metrics','tr_mean_corr','tr_sd_corr','te_mean_sd_metrics','te_mean_corr','te_sd_corr')
+
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    'results_index/final_list_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_object, file = output_file)
+```
+
+```{r,echo=FALSE}
+cat(
+  'Variable importance using the model fitted on the total training dataset'
+)
+varimps %>%
+  slice_max(50,Gain) %>%
+  ggplot(aes(reorder(Feature, Gain), Gain)) +
+  geom_col(aes(fill = Gain))  +
+  scale_fill_gradient2(
+    low = "white",
+    high = "blue",
+    midpoint = median(varimps_app$Gain)
+  )  +
+  coord_flip()  +
+  labs(x = "Feature")
+
+varimps[order(-varimps$Gain),]
+
+```
+
+
+#### Results on training dataset fitted and evaluated on the training set itself. 
+```{r,echo=FALSE}
+m
+m1
+s
+s_mean
+s1
+s1_mean
+```
+
+#### Results on training dataset fitted and evaluated on the training set itself. 
+```{r,echo=FALSE}
+m2
+m3
+s2
+s2_mean
+s3
+s3_mean
+```
+`
