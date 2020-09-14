@@ -1,0 +1,1517 @@
+---
+title: "5000SNPs_LightGBM_100CV_Heslotscheme"
+author: "Cathy Jubin"
+date: "9/14/2020"
+output: html_document
+description: LightGBM model, using tidymodels.
+params:
+  seed:
+    value: 105
+  geno_info:
+    value: 'PCs'
+  phenos_file:
+    value: '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/split_tr_test_20%.RDS'
+  geno_file: '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/geno_hybrids.txt'
+  id_split: 
+    value: 1
+  trait:
+    value: 'yld_bu_ac'
+  sets_predictors:
+    value: 'G+Y+Lon+Lat'
+    choices: ['G','WC+SC','WC+SC+Y+L','Y+L','G+WC+SC','G+Y+L','G+WC+SC+Y+L','G+Y','G+L','G+WC','G+SC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+Y+Lon+Lat','G+WC+SC+Y+Lon+Lat','G+WC+Y+Lon+Lat','G+SC+Y+Lon+Lat','G+SC+Lon+Lat','G+Y+Lon+Lat+P','G+Y+Lon+Lat+T','G+Lon+Lat+P','G+Lon+Lat+T','G+Y+Lon+Lat+T+P','G+Lon+Lat+T+P']
+  method: 
+    value: 'lightgbm'
+  tuning_hyper_parameters: 
+    value: '4-fold-CV-year'
+    choices: ['4-fold-CV-year', 'random-CV']
+  WC_features_removed:
+    value: TRUE
+  step_feature_selection:
+    value: TRUE
+
+    
+  
+---
+
+
+
+
+#### Arguments passed to the function
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+start.time <- Sys.time()
+print(params)
+```
+
+
+
+
+#### Packages to load
+```{r,echo=FALSE,include=FALSE}
+myPaths <-
+  c(
+    "/usr/users/jubin1/.conda/envs/rmarkdown/lib/R/library",
+    "/home/uni08/jubin1/R/x86_64-conda_cos6-linux-gnu-library/3.6",
+    "/home/uni08/jubin1/R/x86_64-redhat-linux-gnu-library/3.6",
+    "/usr/lib64/R/library",
+    "/usr/share/R/library"
+  )
+.libPaths(myPaths)
+
+
+source(
+  '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/setSeeds.R'
+)
+`%notin%` <- Negate(`%in%`)
+  
+```
+  
+```{r}
+library(furrr)
+#library(checkmate)
+library(data.table, lib.loc = "/home/uni08/jubin1/R/x86_64-redhat-linux-gnu-library/3.6")
+library(tidymodels)
+library(vip)
+library(tidyverse)
+library(doFuture)
+library(gridExtra)
+library(future)
+library(treesnip)
+library(lightgbm)
+library(doParallel)
+```
+
+#### The procedure used here is based on the one used in Heslot et al. 2014. The total dataset is split based on the grouping variable 'Year_Exp', which represents the combination of a Year and a Hybrid trial experiment (First two letters refer to the US state abbreviation and the two digits to the ID of the experiment in the state). Two sets of environments are generated and used as training/test sets in the proportions ~4/5 training and ~1/5 test. We control that for each split, data are balanced across years and that each year of data is present both in training and test sets. 100 splits Train/Tests datasets are generated. 
+\newline
+#### To evaluate the performance of the lightgbm model presented here, the accuracy was defined as the correlation between the predicted performance and the observed performance in a given environment. For each train/test split, we compute these environment-based correlations, as well as the average accuracy across predicted environments. Additional metrics are also computed (Rsquared,RMSE,MAE), as presented below. Variable importance is also computed and stored.
+
+\newline
+\newline
+\newline
+\newline
+
+# I. Example illustrated for one split training/test set. 
+
+#### Step 1: load train/test dataset split (parameter 'id_split') which jointly contain all observations for the period 2014-2017 (2018 contained too few observations), as well as genomic information (SNPs matrix), and pre-process the data according to the set of predictors chosen ('sets_predictors').
+  
+```{r, echo=FALSE} 
+phenos = readRDS(params$phenos_file)
+phenos = phenos[[params$id_split]]
+training = phenos[[1]]
+test = phenos[[2]]
+
+print('The number of training observations is:')
+print(nrow(training))
+print('The number of test observations to predict is:')
+print(nrow(test))
+print('The number of Year_Exp to predict is:')
+print(length(unique(test$Year_Exp)))
+
+
+
+test$P.Total=test$P.V+test$P.F+test$P.G
+training$P.Total=training$P.V+training$P.F+training$P.G
+
+training <-
+  training[,-which(
+    colnames(training) %in% c(
+      "parent1",
+      "parent2",
+      "parent1.GBS.sample",
+      "parent2.GBS.sample"
+    )
+  )]
+test <-
+  test[,-which(
+    colnames(test) %in% c(
+      "parent1",
+      "parent2",
+      "parent1.GBS.sample",
+      "parent2.GBS.sample"
+    )
+  )]
+
+geno_hybrids = fread(params$geno_file)
+geno_hybrids = as.data.frame(geno_hybrids)
+
+geno_hybrids <-
+  geno_hybrids[,-which(
+    colnames(geno_hybrids) %in% c(
+      "parent1",
+      "parent2",
+      "parent1.GBS.sample",
+      "parent2.GBS.sample"
+    )
+  )]
+
+print('Data read')
+
+colnames(geno_hybrids)[2:ncol(geno_hybrids)] <-
+  paste0('SNP', colnames(geno_hybrids)[2:ncol(geno_hybrids)])
+geno_hybrids=geno_hybrids[,1:5000]
+
+
+
+if (params$geno_info == 'PCs') {
+  print('Genomic information reduced to PCs extracted from SNPs genotype matrix.')
+  rec1 <- recipe(pedigree ~ . ,
+                 data = geno_hybrids) %>%
+    step_pca(starts_with('SNP'), threshold = .95)
+  pc_reduction <- prep(rec1, training = geno_hybrids)
+  geno_pcs <- juice(pc_reduction)
+  training = merge(training, geno_pcs, by = 'pedigree', all.x = T)
+  test = merge(test, geno_pcs, by = 'pedigree', all.x = T)
+} else{
+  training = merge(training, geno_hybrids, by = 'pedigree', all.x = T)
+  test = merge(test, geno_hybrids, by = 'pedigree', all.x = T)
+}
+
+print('PCA achieved')
+
+
+## Conversion to factors
+training$year = as.factor(as.vector(training$year))
+training$counties = as.factor(as.vector(training$counties))
+test$year = as.factor(as.vector(test$year))
+test$counties = as.factor(as.vector(test$counties))
+
+## Conversion to numeric
+if (!is.numeric(training$Latitude) |
+    !is.numeric(training$Longitude) |
+    !is.numeric(test$Latitude) | !is.numeric(test$Latitude)) {
+  training$Latitude = as.numeric(as.vector(training$Latitude))
+  training$Latitude = as.numeric(as.vector(training$Longitude))
+  test$Latitude = as.numeric(as.vector(test$Latitude))
+  test$Longitude = as.numeric(as.vector(test$Longitude))
+}
+
+## Predictors variables included for prediction according to the sets of predictors defined by the user.
+toMatch = c('.Total','.V', '.F', '.G', 'length.growing.season')
+if (params$geno_info == 'PCs')
+{
+  toMatch2 = 'PC'
+}else{
+  toMatch2 = 'SNP'
+}
+
+toMatch3 = c('year')
+toMatch4 = c('counties')
+toMatch5 = c('.SC')
+toMatch6=c('Year_Exp')
+toMatch7=c('Longitude')
+toMatch8=c('Latitude')
+toMatch9=c('P.V','P.F','P.G')
+toMatch10=c('MeanT.V','MeanT.F','MeanT.G','MinT.V','MinT.F','MinT.G','MaxT.V','MaxT.F','MaxT.G','GDD.V','GDD.F','GDD.G','FreqMaxT30.V','FreqMaxT30.F','FreqMaxT30.G','FreqMaxT35.V','FreqMaxT35.F','FreqMaxT35.G','Photothermal.time.Tot.V','Photothermal.time.Tot.F','Photothermal.time.Tot.G')
+
+matches1 <-
+  grep(paste(toMatch, collapse = "|"), colnames(training), value = TRUE)
+matches2 <-
+  grep(paste(toMatch2, collapse = "|"), colnames(training), value = TRUE)
+matches3 <-
+  grep(paste(toMatch3, collapse = "|"), colnames(training), value = TRUE)
+matches4 <-
+  grep(paste(toMatch4, collapse = "|"), colnames(training), value = TRUE)
+matches5 <-
+  grep(paste(toMatch5, collapse = "|"), colnames(training), value = TRUE)
+matches6 <-
+  grep(paste(toMatch6, collapse = "|"), colnames(training), value = TRUE)
+matches7 <-
+  grep(paste(toMatch7, collapse = "|"), colnames(training), value = TRUE)
+matches8 <-
+  grep(paste(toMatch8, collapse = "|"), colnames(training), value = TRUE)
+
+
+if (params$sets_predictors == 'WC+SC') {
+  predictors = c(matches1, matches5, matches3,matches6)
+}
+if (params$sets_predictors == 'G') {
+  predictors = c(matches2, matches3,matches6)
+}
+if (params$sets_predictors == 'Y+L') {
+  predictors = c(matches3, matches4,matches6)
+}
+if (params$sets_predictors == 'G+WC') {
+  predictors = c(matches1, matches2, matches3,matches6)
+}
+if (params$sets_predictors == 'G+SC') {
+  predictors = c(matches2, matches5, matches3,matches6)
+}
+if (params$sets_predictors == 'WC+SC+Y+L') {
+  predictors = c(matches1, matches3, matches4, matches5,matches6)
+}
+if (params$sets_predictors == 'G+WC+SC') {
+  predictors = c(matches1, matches2, matches5, matches3,matches6)
+}
+if (params$sets_predictors == 'G+Y+L') {
+  predictors = c(matches2, matches3, matches4,matches6)
+}
+if (params$sets_predictors == 'G+SC+Y+Lon+Lat') {
+  predictors = c(matches5,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+WC+SC+Y+L') {
+  predictors = c(matches1, matches2, matches3, matches4, matches5,matches6)
+}
+if (params$sets_predictors == 'G+Y') {
+  predictors = c(matches2, matches3,matches6)
+}
+if (params$sets_predictors == 'G+L') {
+  predictors = c(matches2, matches4, matches3,matches6)
+}
+if (params$sets_predictors == 'G+WC+SC+Lon+Lat') {
+  predictors = c(matches1,matches2,matches3, matches5,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+WC+Lon+Lat') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+SC+Lon+Lat') {
+  predictors = c(matches5,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Y+Lon+Lat+P') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Y+Lon+Lat+T') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Y+Lon+Lat+T+P') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Lon+Lat+P') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Lon+Lat+T') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Lon+Lat+T+P') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+Y+Lon+Lat') {
+  predictors = c(matches2, matches3, matches6,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+WC+SC+Y+Lon+Lat') {
+  predictors = c(matches1,matches2,matches3, matches5,matches6,matches7,matches8)
+}
+if (params$sets_predictors == 'G+WC+Y+Lon+Lat') {
+  predictors = c(matches1,matches2,matches3,matches6,matches7,matches8)
+}
+
+
+#Selecting the variables based on the list of predictors defined previously
+#Create dummy variables if factor variables are present
+training = training[, colnames(training) %in% c(predictors, params$trait)]
+test= test[, colnames(test) %in% c(predictors, params$trait)]
+
+
+#Excluding some weather covariates if WC_feature_selection TRUE
+if (params$WC_features_removed==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat','G+WC+Y+Lon+Lat')){
+  to_exclude=c('FreqP5.V','FreqP5.F','FreqP5.G','FreqP5.V', "SumDiffP_ETP.V", "SumDiffP_ETP.F", "SumDiffP_ETP.G")
+  training = training[, colnames(training) %notin% c(to_exclude)]
+  test= test[, colnames(test) %notin% c(to_exclude)]
+
+}
+
+if (params$sets_predictors %in% c('G',
+                           'WC+SC',
+                           'G+WC+SC','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+SC+Lon+Lat','G+Lon+Lat+T','G+Lon+Lat+P','G+Lon+Lat+T+P')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(-yld_bu_ac, -year, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes())
+} else if (params$sets_predictors %in% c('G+L')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(-yld_bu_ac, -year, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(counties,one_hot = TRUE) 
+    
+} else if (params$sets_predictors %in% c('G+Y')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year,preserve = T,one_hot = TRUE)
+} else if (params$sets_predictors %in% c('G+Y+Lon+Lat')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year,preserve = T,one_hot = TRUE)
+} else if (params$sets_predictors %in% c('G+WC')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes())
+} else if (params$sets_predictors %in% c('G+SC')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(year, new_role = "id variable") %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes())
+} else if (params$sets_predictors %in% c('G+Y+L','G+WC+Y+L','G+WC+SC+Y+L')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year,preserve = T,one_hot = TRUE) %>%
+    step_dummy(counties,preserve = F,one_hot = TRUE) 
+} else if (params$sets_predictors %in%c('G+WC+SC+Y+Lon+Lat','G+Y+Lon+Lat+T','G+Y+Lon+Lat+P','G+Y+Lon+Lat+T+P','G+SC+Y+Lon+Lat','G+WC+Y+Lon+Lat')) {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year,preserve = T,one_hot = TRUE) 
+} else {
+  rec <- recipe(yld_bu_ac ~ . ,
+                data = training) %>%
+    update_role(yld_bu_ac, new_role = 'outcome') %>%
+    update_role(-yld_bu_ac, new_role = 'predictor') %>%
+    update_role(Year_Exp, new_role = "id variable") %>%
+    step_normalize(all_numeric(), -all_outcomes()) %>%
+    step_dummy(year,preserve = T,one_hot = TRUE) %>%
+    step_dummy(counties,one_hot = TRUE) 
+}
+
+
+
+```
+
+#### Variables assigned to outcome and predictors using function recipe (tidymodels)
+
+```{r, echo=FALSE} 
+print(rec)
+
+norm_obj <- prep(rec, training = training)
+
+transformed_te <- bake(norm_obj, test)
+
+transformed_tr <- juice(norm_obj)
+print('Number of columns after data pre-processing:')
+print(ncol(transformed_tr))
+print('Name columns after data pre-processing:')
+print(colnames(transformed_tr))
+
+
+print('Data prepared for hyperparameter optimization - First step')
+```
+
+
+#### Step 2: hyperparameter optimization according to the option set in tuning_hyper_parameters
+
+```{r, echo=FALSE,include=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))} 
+
+
+lightgbm_model <-
+  parsnip::boost_tree(
+    mode = "regression",
+    trees = tune(),
+    min_n = tune(),
+    tree_depth = tune(),
+    learn_rate = tune(),
+    sample_size = tune()
+  ) %>%
+  set_engine("lightgbm", objective = "reg:linear") %>%
+  translate()
+
+
+
+```
+##### Grid range for various parameters
+```{r, echo=FALSE}
+lgbm_grid <- expand.grid(
+  trees = c(2000,2200),
+  min_n = c(10),
+  tree_depth = c(6),
+  learn_rate = c(0.05),
+  sample_size = c(1)
+)
+```  
+
+  
+##### Hyperparameter tuning ('tuning_hyper_parameters' param): two methods implemented:
+##### 1: (default) cv using  4 folds within the training set and using two repeats, each fold stratified according to the column year: '4-fold-CV-year'
+##### 2: cv using 4 folds and two repeats (without stratification by year): 'random-CV'
+```{r, echo=FALSE}
+print('Starting hyperparameter optimization')
+if (params$sets_predictors %in% c('G',
+                                  'WC+SC',
+                                  'G+WC+SC','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+SC+Lon+Lat','G+Lon+Lat+T','G+Lon+Lat+P','G+Lon+Lat+T+P')) {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . - year - Year_Exp)
+  
+} else if (params$sets_predictors %in% c('G+L')) {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+WC')) {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+SC')) {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in% c('G+Y+L')) {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . - year -Year_Exp)
+  
+  
+} else if (params$sets_predictors %in%c('G+Y','G+Y+Lon+Lat','G+WC+Y+L','G+WC+SC+Y+L','G+WC+SC+Y+Lon+Lat','G+Y+Lon+Lat+T','G+Y+Lon+Lat+P','G+Y+Lon+Lat+T+P','G+SC+Y+Lon+Lat','G+WC+Y+Lon+Lat')) {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . -Year_Exp - year,blueprint = hardhat::default_formula_blueprint(indicators = 'traditional'))
+  
+  
+} else {
+  wf <- workflow() %>%
+    add_model(lightgbm_model) %>%
+    add_formula(yld_bu_ac ~ . -Year_Exp)
+  
+}
+
+
+set_dependency("boost_tree", eng = "lightgbm",pkg="lightgbm")
+
+
+
+## Write the datasets used for training and test datasets
+
+tr_dataset <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/training_dataset',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '.txt',
+    sep = ''
+  )
+
+write.table(transformed_tr[,-which(colnames(transformed_tr) %notin% c('year','Year_Exp'))], file = tr_dataset)
+
+te_dataset <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/test_dataset',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '.txt',
+    sep = ''
+  )
+
+write.table(transformed_te[,-which(colnames(transformed_te) %notin% c('year','Year_Exp'))], file = te_dataset)
+
+
+
+## 
+
+if (params$tuning_hyper_parameters == '4-fold-CV-year') {
+  folds <- vfold_cv(transformed_tr,
+                    strata = 'year',
+                    repeats = 2,
+                    v = 4)
+  
+  
+  opt_res <- wf %>%
+    tune_grid(
+      resamples = folds,
+      grid = lgbm_grid,
+      metrics = yardstick::metric_set(rmse,rsq,mae),
+      control = tune::control_grid(verbose = TRUE)
+    )
+  
+  print(opt_res)
+  
+}
+
+if (params$tuning_hyper_parameters == 'random-CV') {
+  folds <- vfold_cv(transformed_tr, repeats = 2, v = 4)
+  
+  opt_res <- wf %>%
+    tune_grid(
+      resamples = folds,
+      grid = lgbm_grid,
+      metrics = yardstick::metric_set(rmse,rsq, mae),
+      control = tune::control_grid(verbose = TRUE)
+    )
+  print(opt_res)
+  
+}
+
+
+
+
+print('Hyperparameter optimization done.')
+
+```
+
+### Collected metrics from tune grid results
+```{r,echo=FALSE}
+
+print(opt_res %>% 
+  collect_metrics())
+
+```
+### Plots resulting from hyperparameter optimization on the training set using 4-folds CV:
+ 
+```{r,echo=FALSE}
+autoplot(opt_res)
+```
+
+
+### Extract the best hyperparameters based on minimal RMSE for fitting on training set in the next step.
+```{r,echo=FALSE}
+lightgbm_best_params <- opt_res %>%
+  tune::select_best("rmse",maximize=FALSE)->highest_score
+
+lightgbm_best_params
+
+lightgbm_model_final <- finalize_workflow(
+  wf,
+  lightgbm_best_params
+)
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/best_hyperparameters_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(opt_res, file = output_file)
+
+
+  
+```
+
+
+\newline
+\newline
+\newline
+\newline
+
+## **Prediction using the best hyperparameters and the whole training dataset with all features**
+
+### Prediction using the best model tuned/fitted on training set and evaluated both on training and test sets
+  
+```{r,echo=FALSE,include=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+
+final_lightgbm <- 
+  lightgbm_model_final %>%
+  fit(data = transformed_tr) 
+
+
+
+## Across Environments
+
+m <- final_lightgbm %>% predict(new_data = transformed_tr)  %>%
+    bind_cols(transformed_tr) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m1 <- final_lightgbm %>% predict(new_data = transformed_tr) %>%
+    bind_cols(transformed_tr) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+
+m2 <- final_lightgbm %>% predict(new_data = transformed_te)  %>%
+    bind_cols(transformed_te) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m3 <- final_lightgbm %>% predict(new_data = transformed_te) %>%
+    bind_cols(transformed_te) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+  
+## By Environment
+
+s <- final_lightgbm %>% predict(new_data = transformed_tr)  %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s$.estimate=as.numeric(s$.estimate)
+s_mean <- s %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s_mean <- unique(s_mean[,c(2,5,6)])
+
+s1 <- final_lightgbm %>% predict(new_data = transformed_tr) %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s1_mean<-mean(s1$COR)
+s1_sd<-sd(s1$COR)
+
+s2 <- final_lightgbm %>% predict(new_data = transformed_te)  %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s2$.estimate=as.numeric(s2$.estimate)
+s2_mean <- s2 %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s2_mean <- unique(s2_mean[,c(2,5,6)])
+
+s3 <- final_lightgbm %>% predict(new_data = transformed_te) %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s3_mean<-mean(s3$COR)
+s3_sd<-sd(s3$COR)
+
+
+
+varimps <- lgb.importance(model=pull_workflow_fit(final_lightgbm)$fit)
+
+ 
+  
+
+
+final_object <-
+  list(m,m1,m2,m3,varimps,s,s1,s2,s3,s_mean,s1_mean,s1_sd,s2_mean,s3_mean,s3_sd)
+
+
+names(final_object)<-c('tr_metrics_across_all','tr_corr_across_all','te_metrics_across_all','te_corr_across_all','varimps','tr_metrics_by_yearexp','tr_corr_by_yearexp','te_metrics_by_yearexp','te_corr_by_yearexp','tr_mean_sd_metrics','tr_mean_corr','tr_sd_corr','te_mean_sd_metrics','te_mean_corr','te_sd_corr')
+
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/final_list_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_object, file = output_file)
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/fitted_model_index_',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_lightgbm, file = output_file)
+```
+#### Variable importance using the model fitted on the total training dataset. Top 40 variables plotted.
+```{r,echo=FALSE}
+varimps %>%
+  top_n(40,Gain) %>%
+  ggplot(aes(reorder(Feature, Gain), Gain)) +
+  geom_col(aes(fill = Gain))  +
+  scale_fill_gradient2(
+    low = "white",
+    high = "blue",
+    midpoint = median(varimps$Gain)
+  )  +
+  coord_flip()  +
+  labs(x = "Feature")
+
+varimps[order(-varimps$Gain),]
+
+```
+
+
+### Results on training dataset fitted and evaluated on the TRAINING SET itself. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE}
+print(m)
+print(m1)
+
+```
+##### Evaluation done for each environment independently. 
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the training test
+
+```{r,echo=FALSE}
+print(s)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the training set predicted using the training test (average from values above).
+```{r,echo=FALSE}
+print(s_mean)
+```
+###### Pearson's Correlations  for each Year_Exp from the training test
+```{r,echo=FALSE}
+print(s1)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the training set predicted using the training test (average from values above)
+```{r,echo=FALSE}
+print(s1_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the training set predicted using the training test.
+```{r,echo=FALSE}
+print(s1_sd)
+```
+
+
+### Results on training dataset fitted and evaluated on the TEST SET. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE}
+print(m2)
+print(m3)
+
+```
+###### Evaluation done for each environment independently.
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the test test
+
+```{r,echo=FALSE}
+print(s2)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the test set predicted using the training test (average from values above).
+```{r,echo=FALSE}
+print(s2_mean)
+```
+###### Pearson's Correlations for each Year_Exp from the test test
+```{r,echo=FALSE}
+print(s3)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the test set predicted using the training test (average from values above)
+```{r,echo=FALSE}
+print(s3_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the test set predicted using the training test.
+```{r,echo=FALSE}
+print(s3_sd)
+```
+
+\newpage
+
+
+`r if(params$step_feature_selection==FALSE|params$sets_predictors%notin%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat')) {"\\begin{comment}"}`
+
+**The Feature Selection steps among weather covariates are not necessary here since no weather/soil covariates are present within this set of predictors**.
+
+`r if(params$step_feature_selection==FALSE|params$sets_predictors%notin%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat')) {"\\end{comment}"}`
+
+
+## **Feature selection step implementation 1**
+### Prediction  after feature selection (top 30 variables among WC+SC retained) using the best model tuned/fitted on training set and evaluated both on training and test sets
+
+  
+```{r,echo=FALSE,include=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+selected_variables<-slice_max(as.data.frame(varimps[varimps$Feature%in%c(matches1,matches5),]),n=30,Gain)
+variables_to_remove<-varimps[varimps$Feature%in%c(matches1,matches5),]$Feature[varimps[varimps$Feature%in%c(matches1,matches5),]$Feature%notin%(selected_variables$Feature)]
+df_FS1 = transformed_tr %>% select(-variables_to_remove)
+
+folds <- vfold_cv(df_FS1,
+                  strata = 'year',
+                  repeats = 2,
+                  v = 4)
+
+lgbm_grid_2 <- grid_regular(
+  trees(range(c(700,3000))),
+  min_n = c(3,20),
+  tree_depth = c(3,10),
+  learn_rate = c(0.005,0.05),
+  sample_size = c(0.4,1),
+  levels = 5
+)
+
+
+opt_res1 <- wf %>%
+  tune_grid(
+    resamples = folds,
+    grid = lgbm_grid_2,
+    metrics = yardstick::metric_set(rmse, rsq, mae),
+    control = tune::control_grid(verbose = TRUE)
+  )
+
+lightgbm_best_params1 <- opt_res1 %>%
+  tune::select_best("rmse",maximize=FALSE)->highest_score
+
+
+lightgbm_model_final1 <- finalize_workflow(
+  wf,
+  lightgbm_best_params1
+)
+
+final_lightgbm1 <- 
+  lightgbm_model_final1 %>%
+  fit(data = df_FS1 ) 
+
+
+## Across Environments
+
+m <- final_lightgbm1 %>% predict(new_data =  df_FS1 )  %>%
+    bind_cols(transformed_tr) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m1 <- final_lightgbm1 %>% predict(new_data =  df_FS1 ) %>%
+    bind_cols(transformed_tr) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+
+m2 <- final_lightgbm1 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) )  %>%
+    bind_cols(transformed_te) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m3 <- final_lightgbm1 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) ) %>%
+    bind_cols(transformed_te) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+  
+## By Environment
+
+s <- final_lightgbm1 %>% predict(new_data =  df_FS1 )  %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s$.estimate=as.numeric(s$.estimate)
+s_mean <- s %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s_mean <- unique(s_mean[,c(2,5,6)])
+
+s1 <- final_lightgbm1 %>% predict(new_data =  df_FS1 ) %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s1_mean<-mean(s1$COR)
+s1_sd<-sd(s1$COR)
+
+s2 <- final_lightgbm1 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) )  %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s2$.estimate=as.numeric(s2$.estimate)
+s2_mean <- s2 %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s2_mean <- unique(s2_mean[,c(2,5,6)])
+
+s3 <- final_lightgbm1 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) ) %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s3_mean<-mean(s3$COR)
+s3_sd<-sd(s3$COR)
+
+
+
+
+  
+
+
+final_object1 <-
+  list(m,m1,m2,m3,varimps,s,s1,s2,s3,s_mean,s1_mean,s1_sd,s2_mean,s3_mean,s3_sd)
+
+
+names(final_object1)<-c('tr_metrics_across_all','tr_corr_across_all','te_metrics_across_all','te_corr_across_all','varimps','tr_metrics_by_yearexp','tr_corr_by_yearexp','te_metrics_by_yearexp','te_corr_by_yearexp','tr_mean_sd_metrics','tr_mean_corr','tr_sd_corr','te_mean_sd_metrics','te_mean_corr','te_sd_corr')
+
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/FS1_final_list_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_object1, file = output_file)
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/FS1_fitted_model_index_',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_lightgbm1, file = output_file)
+```
+
+
+### Results on training dataset fitted and evaluated on the TRAINING SET itself. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(m)
+print(m1)
+
+```
+##### Evaluation done for each environment independently. 
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the training test
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the training set predicted using the training test (average from values above).
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s_mean)
+```
+###### Pearson's Correlations  for each Year_Exp from the training test
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the training set predicted using the training test (average from values above)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the training set predicted using the training test.
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1_sd)
+```
+
+
+### Results on training dataset fitted and evaluated on the TEST SET. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(m2)
+print(m3)
+
+```
+###### Evaluation done for each environment independently.
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the test test
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s2)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the test set predicted using the training test (average from values above).
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s2_mean)
+```
+###### Pearson's Correlations for each Year_Exp from the test test
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the test set predicted using the training test (average from values above)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the test set predicted using the training test.
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3_sd)
+```
+\newpage
+
+
+## **Feature selection step implementation 2**
+### Prediction  after feature selection (top 20 variables among WC+SC retained) using the best model tuned/fitted on training set and evaluated both on training and test sets
+
+  
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat')),include=FALSE}
+selected_variables<-slice_max(as.data.frame(varimps[varimps$Feature%in%c(matches1,matches5),]),n=20,Gain)
+variables_to_remove<-varimps[varimps$Feature%in%c(matches1,matches5),]$Feature[varimps[varimps$Feature%in%c(matches1,matches5),]$Feature%notin%(selected_variables$Feature)]
+df_FS2 = transformed_tr %>% select(-variables_to_remove)
+
+folds <- vfold_cv(df_FS2,
+                  strata = 'year',
+                  repeats = 2,
+                  v = 4)
+
+opt_res2 <- wf %>%
+  tune_grid(
+    resamples = folds,
+    grid = lgbm_grid_2,
+    metrics = yardstick::metric_set(rmse, rsq, mae),
+    control = tune::control_grid(verbose = TRUE)
+  )
+
+lightgbm_best_params2 <- opt_res2 %>%
+  tune::select_best("rmse",maximize=FALSE)->highest_score
+
+
+lightgbm_model_final2 <- finalize_workflow(
+  wf,
+  lightgbm_best_params2
+)
+
+final_lightgbm2 <- 
+  lightgbm_model_final2 %>%
+  fit(data = df_FS2 ) 
+
+
+## Across Environments
+
+m <- final_lightgbm2 %>% predict(new_data =  df_FS2 )  %>%
+    bind_cols(transformed_tr) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m1 <- final_lightgbm2 %>% predict(new_data =  df_FS2 ) %>%
+    bind_cols(transformed_tr) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+
+m2 <- final_lightgbm2 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) )  %>%
+    bind_cols(transformed_te) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m3 <- final_lightgbm2 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) ) %>%
+    bind_cols(transformed_te) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+  
+## By Environment
+
+s <- final_lightgbm2 %>% predict(new_data =  df_FS2 )  %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s$.estimate=as.numeric(s$.estimate)
+s_mean <- s %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s_mean <- unique(s_mean[,c(2,5,6)])
+
+s1 <- final_lightgbm2 %>% predict(new_data =  df_FS2 ) %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s1_mean<-mean(s1$COR)
+s1_sd<-sd(s1$COR)
+
+s2 <- final_lightgbm2 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) )  %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s2$.estimate=as.numeric(s2$.estimate)
+s2_mean <- s2 %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s2_mean <- unique(s2_mean[,c(2,5,6)])
+
+s3 <- final_lightgbm2 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) ) %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s3_mean<-mean(s3$COR)
+s3_sd<-sd(s3$COR)
+
+
+
+
+  
+
+
+final_object2 <-
+  list(m,m1,m2,m3,varimps,s,s1,s2,s3,s_mean,s1_mean,s1_sd,s2_mean,s3_mean,s3_sd)
+
+
+names(final_object2)<-c('tr_metrics_across_all','tr_corr_across_all','te_metrics_across_all','te_corr_across_all','varimps','tr_metrics_by_yearexp','tr_corr_by_yearexp','te_metrics_by_yearexp','te_corr_by_yearexp','tr_mean_sd_metrics','tr_mean_corr','tr_sd_corr','te_mean_sd_metrics','te_mean_corr','te_sd_corr')
+
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/FS2_final_list_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_object2, file = output_file)
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/FS2_fitted_model_index_',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_lightgbm2, file = output_file)
+```
+
+
+### Results on training dataset fitted and evaluated on the TRAINING SET itself. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(m)
+print(m1)
+
+```
+##### Evaluation done for each environment independently. 
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the training test
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the training set predicted using the training test (average from values above).
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s_mean)
+```
+###### Pearson's Correlations  for each Year_Exp from the training test
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the training set predicted using the training test (average from values above)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the training set predicted using the training test.
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1_sd)
+```
+
+
+### Results on training dataset fitted and evaluated on the TEST SET. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(m2)
+print(m3)
+
+```
+###### Evaluation done for each environment independently.
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the test test
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s2)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the test set predicted using the training test (average from values above).
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s2_mean)
+```
+###### Pearson's Correlations for each Year_Exp from the test test
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the test set predicted using the training test (average from values above)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the test set predicted using the training test.
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3_sd)
+```
+\newpage
+
+## **Feature selection step implementation 3**
+### Prediction  after feature selection (top 10 variables among WC+SC retained) using the best model tuned/fitted on training set and evaluated both on training and test sets
+
+  
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat')),include=FALSE}
+selected_variables<-slice_max(as.data.frame(varimps[varimps$Feature%in%c(matches1,matches5),]),n=10,Gain)
+variables_to_remove<-varimps[varimps$Feature%in%c(matches1,matches5),]$Feature[varimps[varimps$Feature%in%c(matches1,matches5),]$Feature%notin%(selected_variables$Feature)]
+df_FS3 = transformed_tr %>% select(-variables_to_remove)
+
+folds <- vfold_cv(df_FS3,
+                  strata = 'year',
+                  repeats = 2,
+                  v = 4)
+
+opt_res3 <- wf %>%
+  tune_grid(
+    resamples = folds,
+    grid = lgbm_grid_2,
+    metrics = yardstick::metric_set(rmse, rsq, mae),
+    control = tune::control_grid(verbose = TRUE)
+  )
+
+lightgbm_best_params3 <- opt_res3 %>%
+  tune::select_best("rmse",maximize=FALSE)->highest_score
+
+
+lightgbm_model_final3 <- finalize_workflow(
+  wf,
+  lightgbm_best_params3
+)
+
+final_lightgbm3 <- 
+  lightgbm_model_final3 %>%
+  fit(data = df_FS3 ) 
+
+
+## Across Environments
+
+m <- final_lightgbm3 %>% predict(new_data =  df_FS3 )  %>%
+    bind_cols(transformed_tr) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m1 <- final_lightgbm3 %>% predict(new_data =  df_FS3 ) %>%
+    bind_cols(transformed_tr) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+
+m2 <- final_lightgbm3 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) )  %>%
+    bind_cols(transformed_te) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+  
+
+m3 <- final_lightgbm3 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) ) %>%
+    bind_cols(transformed_te) %>%
+    select(yld_bu_ac, .pred)  %>%
+    cor(method = 'pearson')
+  
+## By Environment
+
+s <- final_lightgbm3 %>% predict(new_data =  df_FS3 )  %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s$.estimate=as.numeric(s$.estimate)
+s_mean <- s %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s_mean <- unique(s_mean[,c(2,5,6)])
+
+s1 <- final_lightgbm3 %>% predict(new_data =  df_FS3 ) %>%
+    bind_cols(transformed_tr) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s1_mean<-mean(s1$COR)
+s1_sd<-sd(s1$COR)
+
+s2 <- final_lightgbm3 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) )  %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    yardstick::metrics(yld_bu_ac, .pred) %>%
+    mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
+
+s2$.estimate=as.numeric(s2$.estimate)
+s2_mean <- s2 %>% group_by(.metric) %>% mutate(mean=mean(.estimate)) %>% mutate(sd=sd(.estimate))
+s2_mean <- unique(s2_mean[,c(2,5,6)])
+
+s3 <- final_lightgbm3 %>% predict(new_data =  transformed_te %>% select(-variables_to_remove) ) %>%
+    bind_cols(transformed_te) %>%
+    group_by(Year_Exp) %>%
+    summarize(COR=cor(yld_bu_ac,.pred,method = 'pearson'))
+
+s3_mean<-mean(s3$COR)
+s3_sd<-sd(s3$COR)
+
+
+
+
+  
+
+
+final_object3 <-
+  list(m,m1,m2,m3,varimps,s,s1,s2,s3,s_mean,s1_mean,s1_sd,s2_mean,s3_mean,s3_sd)
+
+
+names(final_object3)<-c('tr_metrics_across_all','tr_corr_across_all','te_metrics_across_all','te_corr_across_all','varimps','tr_metrics_by_yearexp','tr_corr_by_yearexp','te_metrics_by_yearexp','te_corr_by_yearexp','tr_mean_sd_metrics','tr_mean_corr','tr_sd_corr','te_mean_sd_metrics','te_mean_corr','te_sd_corr')
+
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/FS3_final_list_results_index',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_object3, file = output_file)
+
+output_file <-
+  paste(
+    '/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/ML_PREDICTIONS/Heslot_scheme/',
+    params$method,
+    '/results_index/FS3_fitted_model_index_',
+    params$id_split,
+    'geno_info_',
+    params$geno_info,
+    '_',
+    params$sets_predictors,
+    '_',
+    params$trait,
+    '_tuning_method_',
+    params$tuning_hyper_parameters,
+    '.RDS',
+    sep = ''
+  )
+
+saveRDS(final_lightgbm3, file = output_file)
+```
+
+
+### Results on training dataset fitted and evaluated on the TRAINING SET itself. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(m)
+print(m1)
+
+```
+##### Evaluation done for each environment independently. 
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the training test
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the training set predicted using the training test (average from values above).
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s_mean)
+```
+###### Pearson's Correlations  for each Year_Exp from the training test
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the training set predicted using the training test (average from values above)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the training set predicted using the training test.
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s1_sd)
+```
+
+
+### Results on training dataset fitted and evaluated on the TEST SET. 
+###### Evaluation done independently from the environment (metrics computed across all predicted values)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(m2)
+print(m3)
+
+```
+###### Evaluation done for each environment independently.
+###### Metrics RMSE, MAE and R2 for each Year_Exp from the test test
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s2)
+```
+###### Average RMSE, MAE and R2 across Year_Exp from the test set predicted using the training test (average from values above).
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s2_mean)
+```
+###### Pearson's Correlations for each Year_Exp from the test test
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3)
+```
+###### Average Pearson'S Correlations across all Year_Exp from the test set predicted using the training test (average from values above)
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3_mean)
+```
+###### Standard deviation from Pearson's Correlations across Year_Exp from the test set predicted using the training test.
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+print(s3_sd)
+```
+\newpage
+
+```{r,echo=FALSE,eval=if(params$step_feature_selection==TRUE&params$sets_predictors%in%c('WC+SC','WC+SC+Y+L','G+WC+SC','G+WC+SC+Y+L','G+WC','G+WC+Y+L','G+WC+SC+Lon+Lat','G+WC+Lon+Lat','G+WC+SC+Y+Lon+Lat'))}
+
+end.time <- Sys.time()
+time.taken <- difftime(end.time, start.time, units='hours')
+print(time.taken)
+
+```
