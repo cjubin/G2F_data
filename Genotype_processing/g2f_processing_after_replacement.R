@@ -14,10 +14,10 @@ library(doParallel)
 library(purrr)
 library(stringr)
 source(
-  '/home/uni08/jubin1/Data/GenomesToFields/QTL_ML/spaeml_nam/data/Rfunctions_maf/recode_snps.R'
+  'recode_snps.R'
 )
 source(
-  '/home/uni08/jubin1/Data/GenomesToFields/QTL_ML/spaeml_nam/data/Rfunctions_maf/compute_maf.R'
+  'compute_maf.R'
 )
 `%notin%` <- Negate(`%in%`)
 
@@ -30,7 +30,7 @@ df=readRDS('replaced_val.RDS')
 print(dim(df))
 print(colnames(df))
 print(df[,1])
-map <- read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/pos_list_g2f.txt',header=T)
+map <- read.table('pos_list_g2f.txt',header=T)
 name_snps=map$Name
 print(map$Position[500])
 print(colnames(df)[501])
@@ -92,7 +92,6 @@ saveRDS(
   )
 )
 
-setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING")
 
 saveRDS(
   list(l[[1]],l[[2]]),
@@ -333,7 +332,7 @@ print(sum(coded_m==-1))
 write.table(
   coded_m,
   file = paste(
-    '/home/uni08/jubin1/LinkImpute/',
+    '~/LinkImpute/',
     as.character(x6),
     'G2F_preprocessed',
     '.txt',
