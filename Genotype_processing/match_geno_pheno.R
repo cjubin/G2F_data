@@ -66,22 +66,22 @@ phenos_to_genos<-as.matrix(phenos_to_genos)
 phenos_to_genos[phenos_to_genos=='']<-NA
 phenos_to_genos<-phenos_to_genos[complete.cases(phenos_to_genos[,c('phenos_with_SNPsdata','GBS_samples3')]),]
 colnames(phenos_to_genos)<-c('Pedigree','GBSname')
-phenos_to_genos<-rbind(phenos_to_genos,read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/additional_6inbreds.txt',header = T))
+phenos_to_genos<-rbind(phenos_to_genos,read.table('additional_6inbreds.txt',header = T))
 phenos_to_genos$Pedigree<-as.character(as.vector(phenos_to_genos$Pedigree))
 phenos_to_genos <- phenos_to_genos[order(phenos_to_genos$Pedigree),]
 write.table(phenos_to_genos,file='phenos_to_genos.txt',col.names=T,row.names=F,sep='\t',quote=F)
 
 ##
 
-gbs_2017_samples=readRDS('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/g2f_GBS_2017.rds')
+gbs_2017_samples=readRDS('g2f_GBS_2017.rds')
 gbs_2017_samples=as.data.frame(gbs_2017_samples)
-gbs_6samples=fread('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/gbs_6samples.txt.txt',header = T,sep='\t')
+gbs_6samples=fread('gbs_6samples.txt.txt',header = T,sep='\t')
 gbs_6samples=as.data.frame(gbs_6samples)
 colnames(gbs_2017_samples)[1]='Taxa'
 colnames(gbs_6samples)[1]='Taxa'
 
-g2f_2017_markers=read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/pos_list_g2f.txt',header = T)
-g2f_Zea_markers=read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/position_snps_list_zea.txt',header = T)
+g2f_2017_markers=read.table('pos_list_g2f.txt',header = T)
+g2f_Zea_markers=read.table('position_snps_list_zea.txt',header = T)
 colnames(gbs_6samples)[2:ncol(gbs_6samples)]<-as.character(as.vector(g2f_Zea_markers$Name))
 
 
