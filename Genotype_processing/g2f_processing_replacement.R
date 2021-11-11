@@ -13,10 +13,10 @@ library(data.table)
 library(doParallel)
 library(purrr)
 source(
-  '/home/uni08/jubin1/Data/GenomesToFields/QTL_ML/spaeml_nam/data/Rfunctions_maf/recode_snps.R'
+  'recode_snps.R'
 )
 source(
-  '/home/uni08/jubin1/Data/GenomesToFields/QTL_ML/spaeml_nam/data/Rfunctions_maf/compute_maf.R'
+  'compute_maf.R'
 )
 `%notin%` <- Negate(`%in%`)
 
