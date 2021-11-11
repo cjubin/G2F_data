@@ -3,7 +3,7 @@ library(purrr)
 library(dtwclust)
 
 weather = read.table(
-  "/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/WEATHER_PROCESSING/Env_data_processing/replaced_daily_weather.txt",
+  "replaced_daily_weather.txt",
   header = T,
   sep = "\t"
 )
