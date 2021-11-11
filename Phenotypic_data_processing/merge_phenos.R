@@ -2,7 +2,6 @@ rm(list = ls())
 library(data.table)
 library(stringr)
 library(stringi)
-setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/datasets")
 phenos2014=read.table('pheno2014.txt',header = T,sep = '\t',)
 pheno2014_after_cleaning=read.csv('pheno2014_after_cleaning.csv',header = T)
 phenos2014$year<-2014
@@ -71,8 +70,8 @@ all_phenos_1<-all_phenos_1[-which(all_phenos_1$location%in%c("ARH1")&all_phenos_
 ### Third step: remove hybrids for which no genotypic data of the parents are available ###
 
 # Load list of genotypes retained after filtering (with samples names)
-samples_kept<-readRDS('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/name_kept_lines_procedure.RDS')
-key_pheno_geno<-read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/phenos_to_genos.txt',header=T,sep = '\t')
+samples_kept<-readRDS('name_kept_lines_procedure.RDS')
+key_pheno_geno<-read.table('phenos_to_genos.txt',header=T,sep = '\t')
 key_pheno_geno<-key_pheno_geno[key_pheno_geno$GBSname%in%samples_kept,]
 
 # Add some phenotypes to the key in Pedigree --> some phenotype names slightly differ but refer to the same genotype (cf script match_geno_pheno.R)
@@ -105,10 +104,10 @@ for (i in 1:nrow(all_phenos_1)) {
 
 
 ### Final step: construct table to obtain synthetic genotypes from parental inbreds using Pedigree ### 
-write.table(all_phenos_1[all_phenos_1$genotyped=='YES',],file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/phenotypes_after_processing_all.txt',col.names = T,row.names = F,sep = '\t',quote = F)
-write.table(all_phenos_1[all_phenos_1$genotyped=='YES',],file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/phenotypes_after_processing_only_with_GBS.txt',col.names = T,row.names = F,sep = '\t',quote = F)
+write.table(all_phenos_1[all_phenos_1$genotyped=='YES',],file='phenotypes_after_processing_all.txt',col.names = T,row.names = F,sep = '\t',quote = F)
+write.table(all_phenos_1[all_phenos_1$genotyped=='YES',],file='phenotypes_after_processing_only_with_GBS.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
 
 
-write.table(unique(all_phenos_1[all_phenos_1$genotyped=='YES',c("pedigree","parent1","parent2","parent1.GBS.sample","parent2.GBS.sample")]),file='/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/table_hybrids_to_generate.txt',col.names = T,row.names = F,sep = '\t',quote = F)
+write.table(unique(all_phenos_1[all_phenos_1$genotyped=='YES',c("pedigree","parent1","parent2","parent1.GBS.sample","parent2.GBS.sample")]),file='table_hybrids_to_generate.txt',col.names = T,row.names = F,sep = '\t',quote = F)
 
