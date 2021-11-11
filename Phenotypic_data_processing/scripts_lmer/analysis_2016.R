@@ -1,16 +1,15 @@
 rm(list = ls())
-setwd("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/datasets")
 library(lme4)
 library(lsmeans)
 library(plyr)
 
 
-source("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/outliers_functions/compute_redres.R")
-source("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/outliers_functions/pearsonres.R")
-source("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/outliers_functions/plot_redres.R")
-source("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/outliers_functions/rawres.R")
-source("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/outliers_functions/redres.R")
-source("/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/outliers_functions/stdres.R")
+source("outliers_functions/compute_redres.R")
+source("outliers_functions/pearsonres.R")
+source("outliers_functions/plot_redres.R")
+source("outliers_functions/rawres.R")
+source("outliers_functions/redres.R")
+source("outliers_functions/stdres.R")
 
 
 `%notin%` <- Negate(`%in%`)
