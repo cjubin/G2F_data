@@ -10,11 +10,11 @@ library(plyr)
 
 
 # Load names of inbred lines present in pheno files.
-all_inbreds_phenos=read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/datasets/all_inbreds_pheno_trials.txt',header = T,sep = '\t',stringsAsFactors = F,quote = NULL)
+all_inbreds_phenos=read.table('all_inbreds_pheno_trials.txt',header = T,sep = '\t',stringsAsFactors = F,quote = NULL)
 
 
 # Load genotypes names together with GBS sample ID
-genotypes_names=read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/g2f_2017_gbs_hybrid_codes.txt',header=T,fill = T,sep = '\t')
+genotypes_names=read.table('g2f_2017_gbs_hybrid_codes.txt',header=T,fill = T,sep = '\t')
 df1<-as.data.frame(genotypes_names[,c('Female.Pedigree','Female.GBS')])
 df2<-as.data.frame(genotypes_names[,c('Male.Pedigree','Male.GBS')])
 colnames(df1)<-colnames(df2)<-c('Pedigree','GBSname')
@@ -33,7 +33,7 @@ matches <- unique (grep(paste(toMatch,collapse="|"),
 phenos_remaining_not_identified<-phenos_to_identify_in_genos[-which(phenos_to_identify_in_genos%in%matches)]
 
 
-all_gbs_samples_table=read.table('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/GENOTYPE_PROCESSING/datasets/taxa_list_g2f.txt',header = T,sep = '\t')
+all_gbs_samples_table=read.table('taxa_list_g2f.txt',header = T,sep = '\t')
 
 
 
