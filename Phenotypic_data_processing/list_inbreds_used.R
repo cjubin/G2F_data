@@ -1,4 +1,3 @@
-setwd('/home/uni08/jubin1/Data/GenomesToFields/G2F20142018/PHENOTYPES_PROCESSING/datasets')
 library(stringr)
 library(stringi)
 
